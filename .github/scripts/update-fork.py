@@ -45,8 +45,10 @@ def main():
     if existing:
         print(f"Existing update PR ({existing[0]['state']}): {existing[0]['url']}")
         return
+    compare = f"https://github.com/{FORK}/compare/custom...{branch}?expand=1"
     if run("git", "ls-remote", "--heads", "origin", branch).stdout.strip():
-        raise RuntimeError(f"Remote branch {branch} already exists without a PR. Inspect it before retrying.")
+        print(f"Existing update branch: {compare}")
+        return
     if run("git", "show-ref", "--verify", f"refs/heads/{branch}", check=False).returncode == 0:
         raise RuntimeError(f"Local branch {branch} already exists. Inspect it before retrying.")
     run("git", "switch", "--create", branch, "origin/custom")
@@ -61,6 +63,17 @@ def main():
         run("git", "branch", "--force", branch, tag)
         run("git", "switch", branch)
     run("git", "push", "--set-upstream", "origin", branch)
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        print(f"Prepared update branch: {compare}", flush=True)
+        if conflicts:
+            print("Merge conflicts require AI review: " + ", ".join(conflicts))
+        else:
+            run("gh", "workflow", "run", "custom-ci.yml", "--repo", FORK, "--ref", branch)
+        summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary:
+            with open(summary, "a", encoding="utf-8") as output:
+                output.write(f"main synced. [Review the release update]({compare}).\n")
+        return
     body = (f"Update the custom proxy from official [{tag}]({release['html_url']}).\n\n"
             "Keep account selection, quota guidance, and request observability working. "
             "This PR does not deploy to oracler.\n\n")

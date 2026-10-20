@@ -14,9 +14,9 @@ This fork uses `custom-ci` instead, so an upstream translator change does not bl
 ## Prepare an official update
 
 The `update-fork` workflow runs weekly on Monday at 03:17 UTC, or manually from GitHub Actions.
-It fast-forwards `main` to official upstream main and proposes the latest stable release against `custom`.
+It fast-forwards `main` to official upstream main and prepares the latest stable release update branch against `custom`.
 It does not force-push main, merge a PR, switch accounts, or deploy a server.
-Repeated runs reuse the existing release PR. A closed PR is left closed until you choose what to do.
+Repeated runs reuse the existing release PR or update branch. A closed PR is left closed until you choose what to do.
 
 For a local run, start in a clean checkout with Git, Python 3, and authenticated GitHub CLI:
 
@@ -26,8 +26,11 @@ git pull --ff-only origin custom
 python .github/scripts/update-fork.py
 ```
 
-A clean merge dispatches `custom-ci` on its branch. A conflict creates a draft PR from the official release.
-Resolve it by merging `origin/custom` into that PR branch. Never select an entire side without examining the behavior.
+A clean merge dispatches `custom-ci` on its branch. A conflict prepares a branch from the official release.
+The Actions run summary links to a comparison where you or an AI agent can open a PR.
+The scheduled workflow does not create or approve PRs and does not require a repository permission change.
+A local run uses your existing GitHub CLI login to open a PR for a new update branch.
+Resolve conflicts by merging `origin/custom` into the update branch. Never select an entire side without examining the behavior.
 The workflow uses GitHub's repository token. It needs no OpenAI key or personal access token.
 AI conflict resolution runs when you ask an agent to work on the update PR. It is not an unattended AI service.
 

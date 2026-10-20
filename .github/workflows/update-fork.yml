@@ -7,7 +7,7 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
+  pull-requests: read
   actions: write
 
 concurrency:
@@ -31,7 +31,7 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-      - name: Sync official main and prepare release PR
+      - name: Sync official main and prepare release branch
         env:
           GH_TOKEN: ${{ github.token }}
         run: python .github/scripts/update-fork.py

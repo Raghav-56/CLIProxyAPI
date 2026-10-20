@@ -143,6 +143,16 @@ class UpdateForkTest(unittest.TestCase):
             self.update()
         self.assertEqual((self.checkout / "console.txt").read_text(), "uncommitted changes\n")
 
+    def test_actions_prepares_branch_without_creating_pr(self):
+        self.upstream_release()
+        with patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}):
+            self.update()
+            published = self.git("--git-dir", str(self.origin), "rev-parse", "updates/upstream-v8.0.28").stdout.strip()
+            self.update()
+            self.assertEqual(self.git("--git-dir", str(self.origin), "rev-parse", "updates/upstream-v8.0.28").stdout.strip(), published)
+        self.assertEqual(self.prs, [])
+        self.assertEqual(len(self.dispatches), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
