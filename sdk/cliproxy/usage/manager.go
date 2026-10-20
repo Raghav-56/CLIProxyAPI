@@ -42,7 +42,9 @@ type Record struct {
 	SessionID       string
 	ParentSessionID string
 	AuthID          string
-	AuthIndex       string
+	// AccountEmail is the non-secret account identity captured before execution.
+	AccountEmail string
+	AuthIndex    string
 	// AccessTokenSHA256 identifies the OAuth token version without exposing the token.
 	AccessTokenSHA256 string
 	AuthType          string

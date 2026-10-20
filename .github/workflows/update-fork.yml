@@ -1,0 +1,37 @@
+name: update-fork
+
+on:
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+  actions: write
+
+concurrency:
+  group: update-fork
+  cancel-in-progress: false
+
+jobs:
+  prepare-update:
+    if: github.repository == 'Raghav-56/CLIProxyAPI'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: custom
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Identify maintenance commits
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+      - name: Sync official main and prepare release branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python .github/scripts/update-fork.py
