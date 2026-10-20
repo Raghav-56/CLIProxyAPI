@@ -56,6 +56,7 @@ _bmad/*
 _bmad-output/*
 .gocache/
 .gitnexus/
+__pycache__/
 
 # macOS
 .DS_Store
