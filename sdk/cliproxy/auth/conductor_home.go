@@ -949,6 +949,10 @@ func (m *Manager) pickNextViaHome(ctx context.Context, model string, opts clipro
 }
 
 func (m *Manager) pickHomeDispatchSelection(ctx context.Context, model string, opts cliproxyexecutor.Options) (*HomeDispatchSelection, error) {
+	ctx = m.withAccountPolicySnapshot(ctx)
+	if errPolicy := m.accountPolicyHomeError(ctx); errPolicy != nil {
+		return nil, errPolicy
+	}
 	if m == nil {
 		return nil, &Error{Code: "auth_not_found", Message: "no auth available"}
 	}

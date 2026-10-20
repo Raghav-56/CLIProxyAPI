@@ -2,6 +2,8 @@ package api
 
 import (
 	"net/http"
+	"os"
+	"runtime"
 
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/api/handlers/management"
@@ -28,8 +30,14 @@ func (s *Server) registerManagementV8Routes() {
 	}
 
 	v8.GET("/server/latest-version", s.mgmt.GetLatestVersion)
+	v8.GET("/server/info", func(c *gin.Context) {
+		hostname, _ := os.Hostname()
+		c.JSON(http.StatusOK, gin.H{"hostname": hostname, "os": runtime.GOOS, "architecture": runtime.GOARCH})
+	})
 	v8.POST("/requests/api-call", s.mgmt.APICall)
 	v8.POST("/routing/cooldown/reset", s.mgmt.ResetQuota)
+	v8.GET("/routing/codex-account", s.mgmt.GetCodexAccountRouting)
+	v8.PUT("/routing/codex-account", s.mgmt.PutCodexAccountRouting)
 	v8.GET("/routing/model-definitions/:channel", s.mgmt.GetStaticModelDefinitions)
 
 	v8.GET("/observability/logs", s.mgmt.GetLogs)
@@ -39,6 +47,7 @@ func (s *Server) registerManagementV8Routes() {
 	v8.GET("/observability/logs/requests/:id", s.mgmt.GetRequestLogByID)
 	v8.GET("/observability/usage/api-keys", s.mgmt.GetAPIKeyUsage)
 	v8.GET("/observability/usage/queue", s.mgmt.GetUsageQueue)
+	v8.GET("/observability/requests/recent", s.getRecentRequests)
 
 	v8.GET("/credentials", s.mgmt.ListAuthFiles)
 	v8.POST("/credentials", s.mgmt.UploadAuthFile)
