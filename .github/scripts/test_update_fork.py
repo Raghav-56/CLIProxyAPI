@@ -16,6 +16,9 @@ spec.loader.exec_module(updater)
 
 class UpdateForkTest(unittest.TestCase):
     def setUp(self):
+        environment = patch.dict(os.environ, {"GITHUB_ACTIONS": "false", "GITHUB_STEP_SUMMARY": ""})
+        environment.start()
+        self.addCleanup(environment.stop)
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.original_cwd = Path.cwd()
