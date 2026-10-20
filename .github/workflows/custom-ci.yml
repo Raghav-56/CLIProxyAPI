@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: custom-ci-${{ github.ref }}
+  group: custom-ci-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
