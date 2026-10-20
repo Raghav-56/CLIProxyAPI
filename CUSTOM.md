@@ -7,6 +7,8 @@
 | `updates/upstream-vX.Y.Z` | A proposed official release update |
 
 Use `custom` for development and builds. Keep custom commits out of `main`.
+Merge upstream update PRs with a merge commit. Squashing or rebasing loses the upstream ancestry used by later updates.
+The fork disables squash and rebase merging to preserve that history.
 The repository default branch is `custom` so its maintenance workflows can run.
 Upstream-only PR guards and release jobs are restricted to the official repository.
 This fork uses `custom-ci` instead, so an upstream translator change does not block a release update.
