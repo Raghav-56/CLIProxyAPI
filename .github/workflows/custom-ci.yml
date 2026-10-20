@@ -1,0 +1,43 @@
+name: custom-ci
+
+on:
+  push:
+    branches: [custom, 'updates/**']
+  pull_request:
+    branches: [custom]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: custom-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  custom-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check formatting
+        run: |
+          git diff --check
+          test -z "$(gofmt -l cmd/config-export internal/api/handlers/management/codex_account_policy*.go internal/api/server_accounts*.go internal/api/server_codex_account_policy_test.go internal/api/recent_requests*.go sdk/cliproxy/auth/conductor_account_policy*.go)"
+      - name: Test account console
+        run: node --test internal/api/assets/accounts.test.cjs
+      - name: Test upstream updater
+        run: python3 -B -m unittest discover -s .github/scripts -p test_update_fork.py -v
+      - name: Test Go packages
+        run: go test ./...
+      - name: Build server and config exporter
+        run: |
+          go build -o "$RUNNER_TEMP/cli-proxy-api" ./cmd/server
+          go build -o "$RUNNER_TEMP/config-export" ./cmd/config-export
