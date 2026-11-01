@@ -41,6 +41,8 @@ func ComputeSourceHash(data []byte) string {
 // copies stay identical. When the plaintext cannot be removed it returns an error and
 // leaves configFile untouched, so every later attempt refuses the file again.
 func PrepareConfigFileForUpload(configFile string) error {
+	configFileMu.Lock()
+	defer configFileMu.Unlock()
 	data, errRead := os.ReadFile(configFile)
 	if errRead != nil {
 		return errRead
@@ -156,7 +158,9 @@ func managementSecretKeyPath(data []byte) []string {
 // If optional is true and the file is empty or invalid, it returns an empty Config.
 func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 	// Read the entire configuration file into memory.
+	configFileMu.RLock()
 	data, err := os.ReadFile(configFile)
+	configFileMu.RUnlock()
 	if err != nil {
 		if optional {
 			if os.IsNotExist(err) || errors.Is(err, syscall.EISDIR) {
@@ -336,18 +340,8 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 
 	// Only conflicting legacy fields are removed on load. A legacy-only document
 	// stays legacy until a v8 configuration write explicitly migrates it.
-	current, errRead := os.ReadFile(configFile)
-	if errRead != nil {
-		return nil, errRead
-	}
-	cleaned, changed, errLayout := NormalizeConfigLayout(current, false)
-	if errLayout != nil {
-		return nil, errLayout
-	}
-	if changed {
-		if errWrite := os.WriteFile(configFile, cleaned, 0600); errWrite != nil {
-			return nil, fmt.Errorf("clean conflicting config fields: %w", errWrite)
-		}
+	if errCleanup := cleanConflictingConfigFields(configFile); errCleanup != nil {
+		return nil, errCleanup
 	}
 
 	// Record the exact bytes this config was parsed from, so a consumer can tell
@@ -356,4 +350,24 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 
 	// Return the populated configuration struct.
 	return &cfg, nil
+}
+
+func cleanConflictingConfigFields(configFile string) error {
+	configFileMu.Lock()
+	defer configFileMu.Unlock()
+	current, errRead := os.ReadFile(configFile)
+	if errRead != nil {
+		return errRead
+	}
+	cleaned, changed, errLayout := NormalizeConfigLayout(current, false)
+	if errLayout != nil {
+		return errLayout
+	}
+	if changed {
+		if errWrite := os.WriteFile(configFile, cleaned, 0600); errWrite != nil {
+			return fmt.Errorf("clean conflicting config fields: %w", errWrite)
+		}
+	}
+
+	return nil
 }

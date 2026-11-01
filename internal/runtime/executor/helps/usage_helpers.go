@@ -39,6 +39,7 @@ type UsageReporter struct {
 	model                string
 	alias                string
 	authID               string
+	accountEmail         string
 	authIndex            string
 	authMu               sync.RWMutex
 	accessTokenHash      string
@@ -151,6 +152,11 @@ func NewUsageReporter(ctx context.Context, provider, model string, auth *cliprox
 	}
 	if auth != nil {
 		reporter.authID = auth.ID
+		reporter.accountEmail = strings.TrimSpace(auth.Attributes["email"])
+		if reporter.accountEmail == "" && auth.Metadata != nil {
+			reporter.accountEmail, _ = auth.Metadata["email"].(string)
+			reporter.accountEmail = strings.TrimSpace(reporter.accountEmail)
+		}
 		reporter.authIndex = auth.EnsureIndex()
 		reporter.accessTokenHash = authAccessTokenSHA256(auth)
 	}
@@ -693,6 +699,7 @@ func (r *UsageReporter) buildRecordForModel(model string, detail usage.Detail, f
 		SessionID:            r.sessionID,
 		ParentSessionID:      r.parentSessionID,
 		AuthID:               r.authID,
+		AccountEmail:         r.accountEmail,
 		AuthIndex:            r.authIndex,
 		AccessTokenSHA256:    r.accessTokenFingerprint(),
 		AuthType:             r.authType,

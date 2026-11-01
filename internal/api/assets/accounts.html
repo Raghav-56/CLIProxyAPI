@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Accounts · CLIProxyAPI</title>
+  <link rel="stylesheet" href="/accounts-assets/accounts.css">
+  <script src="/accounts-assets/accounts.js" defer></script>
+</head>
+<body data-host="__PROXY_HOST__">
+  <header class="topbar">
+    <a class="brand" href="/accounts.html"><span class="brand-mark" aria-hidden="true">CP</span><span>CLIProxyAPI<span class="brand-sub">Account console</span></span></a>
+    <nav aria-label="Proxy navigation"><a href="/accounts.html" aria-current="page">Accounts</a><a href="/management.html">Advanced settings</a></nav>
+    <button id="logout" class="quiet" hidden>Disconnect</button>
+  </header>
+  <main>
+    <section class="intro">
+      <div><p class="eyebrow">YOUR CODEX SUBSCRIPTIONS</p><h1>Choose your Codex account.</h1><p class="subtitle">Select the account your coding tools use. Check its limits before you switch.</p></div>
+      <div class="host"><span class="host-dot" aria-hidden="true"></span><div><span class="muted small">Proxy host</span><strong id="hostname"></strong></div></div>
+    </section>
+    <section id="login-panel" class="login-panel" aria-labelledby="login-title">
+      <div><h2 id="login-title">Connect to your proxy</h2><p>Use the same management key as the main dashboard.</p></div>
+      <form id="login-form">
+        <label for="management-key">Management key</label>
+        <div class="login-fields"><input id="management-key" type="password" autocomplete="current-password" required placeholder="Paste your management key"><button type="submit" class="primary">Connect</button></div>
+        <label class="remember"><input id="remember" type="checkbox"> Keep signed in for this browser tab</label>
+        <p id="login-error" class="error" role="alert" hidden></p>
+      </form>
+    </section>
+    <section id="workspace" hidden>
+      <div class="overview" aria-label="Routing summary">
+        <div><span class="muted small">Selected account</span><strong id="selected-account">Loading…</strong></div>
+        <div><span class="muted small">Routing</span><strong id="routing-mode">Manual selection</strong></div>
+        <div><span class="muted small">Saved accounts</span><strong id="account-count">—</strong></div>
+        <div><span class="muted small">Quota checked</span><strong id="checked-at">Not yet</strong></div>
+      </div>
+      <section class="recommendation" aria-label="Plus account recommendation">
+        <div><p class="eyebrow">PLUS QUOTA GUIDANCE</p><h2 id="recommendation-title">Check Plus quotas for a recommendation</h2><p id="recommendation-detail" class="muted"></p><p class="small muted">Choose an account with quota available before its weekly reset. Your manual selection stays in place until you switch.</p></div>
+        <button id="use-recommended" class="primary" hidden>Use recommended account</button>
+      </section>
+      <div class="section-heading"><div><h2>Your accounts</h2><p class="muted">A selection applies to this proxy and the tools connected to it.</p></div><div class="actions"><button id="refresh-accounts" class="secondary">Refresh accounts</button><button id="refresh-quotas" class="primary">Refresh quotas</button></div></div>
+      <p id="notice" class="notice" role="status" aria-live="polite" hidden></p>
+      <p id="page-error" class="error page-error" role="alert" hidden></p>
+      <div id="account-grid" class="account-grid" aria-live="polite"></div>
+      <section class="empty" id="empty" hidden><h2>No Codex accounts yet</h2><p>Add a Codex OAuth login in the management dashboard, then refresh this page.</p><a class="button secondary" href="/management.html#/oauth">Add an account</a></section>
+      <footer class="footnote"><span>Requests keep their account choice through retries. Switching affects new requests.</span><a href="/management.html#/oauth">Add another account</a></footer>
+      <section class="diagnostics" aria-labelledby="requests-title">
+        <div class="section-heading"><div><p class="eyebrow">LIVE ROUTING</p><h2 id="requests-title">Recent request attempts</h2><p class="muted">Actual account, model and transport on <strong id="requests-host"></strong>. Up to 200 attempts since this proxy started.</p></div><button id="refresh-requests" class="secondary">Refresh requests</button></div>
+        <p id="requests-error" class="error" role="alert" hidden></p>
+        <p id="requests-empty" class="muted">No inference attempts recorded yet. Send a request from Codex or T3 Code, then refresh.</p>
+        <div id="request-list" class="request-list"></div>
+        <button id="more-requests" class="quiet" hidden>Show 20 more attempts</button>
+        <p class="small muted"><span id="requests-updated"></span> · Refreshes every 15 seconds while this tab is visible. Retries can appear as separate attempts. Durations are elapsed time for an attempt.</p>
+      </section>
+    </section>
+  </main>
+</body>
+</html>

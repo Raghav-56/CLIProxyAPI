@@ -125,6 +125,10 @@ func (m *Manager) Execute(ctx context.Context, providers []string, req cliproxye
 	req, opts = cliproxysession.Enrich(req, opts)
 	ctx = WithCodexClientRequest(ctx, IsCodexClientRequest(ctx, opts.Headers))
 	ctx = coreusage.CaptureIdentity(ctx)
+	ctx = m.withAccountPolicySnapshot(ctx)
+	if errPolicy := m.accountPolicyHomeError(ctx); errPolicy != nil {
+		return cliproxyexecutor.Response{}, errPolicy
+	}
 	normalized := m.normalizeProviders(providers)
 	if len(normalized) == 0 {
 		return cliproxyexecutor.Response{}, &Error{Code: "provider_not_found", Message: "no provider supplied"}
@@ -187,6 +191,10 @@ func (m *Manager) ExecuteCount(ctx context.Context, providers []string, req clip
 	req, opts = cliproxysession.Enrich(req, opts)
 	ctx = WithCodexClientRequest(ctx, IsCodexClientRequest(ctx, opts.Headers))
 	ctx = coreusage.CaptureIdentity(ctx)
+	ctx = m.withAccountPolicySnapshot(ctx)
+	if errPolicy := m.accountPolicyHomeError(ctx); errPolicy != nil {
+		return cliproxyexecutor.Response{}, errPolicy
+	}
 	normalized := m.normalizeProviders(providers)
 	if len(normalized) == 0 {
 		return cliproxyexecutor.Response{}, &Error{Code: "provider_not_found", Message: "no provider supplied"}
@@ -242,6 +250,10 @@ func (m *Manager) ExecuteStream(ctx context.Context, providers []string, req cli
 	req, opts = cliproxysession.Enrich(req, opts)
 	ctx = WithCodexClientRequest(ctx, IsCodexClientRequest(ctx, opts.Headers))
 	ctx = coreusage.CaptureIdentity(ctx)
+	ctx = m.withAccountPolicySnapshot(ctx)
+	if errPolicy := m.accountPolicyHomeError(ctx); errPolicy != nil {
+		return nil, errPolicy
+	}
 	if m.HomeEnabled() {
 		if unlockSession := m.lockHomeWebsocketSession(ctx, opts); unlockSession != nil {
 			defer unlockSession()
