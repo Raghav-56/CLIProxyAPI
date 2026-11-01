@@ -80,6 +80,7 @@ func (h *OpenAIResponsesAPIHandler) forwardResponsesWebsocket(
 	for {
 		select {
 		case interruptPayload := <-localFrames:
+			opts.localInterrupt.end()
 			return completeResponsesWebsocketLocalInterrupt(writer, wsTimelineLog, cancel, interruptPayload, outputItemsByIndex, outputItemsFallback, pendingToolCallIDs)
 		case <-c.Request.Context().Done():
 			cancel(c.Request.Context().Err())
@@ -165,6 +166,7 @@ func (h *OpenAIResponsesAPIHandler) forwardResponsesWebsocket(
 					continue
 				}
 				if eventType == "response.created" {
+					opts.localInterrupt.begin()
 					responseStarted = true
 					completed = false
 					outputItemsByIndex = make(map[int64][]byte)
@@ -202,6 +204,9 @@ func (h *OpenAIResponsesAPIHandler) forwardResponsesWebsocket(
 					completed = true
 					completedOutput = responseCompletedOutputFromPayload(payloads[i], outputItemsByIndex, outputItemsFallback)
 					completedResponseID = responseCompletedIDFromPayload(payloads[i])
+				}
+				if completed || eventType == "response.failed" || payloadErrMsg != nil {
+					opts.localInterrupt.end()
 				}
 				markAPIResponseTimestamp(c)
 				if payloadErrMsg != nil {
