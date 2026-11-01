@@ -39,6 +39,8 @@ func (s *Server) registerManagementV8Routes() {
 	v8.GET("/routing/codex-account", s.mgmt.GetCodexAccountRouting)
 	v8.PUT("/routing/codex-account", s.mgmt.PutCodexAccountRouting)
 	v8.GET("/routing/model-definitions/:channel", s.mgmt.GetStaticModelDefinitions)
+	v8.POST("/routing/model-definitions/refresh", s.mgmt.RefreshModelDefinitions)
+	v8.POST("/models/refresh", s.mgmt.RefreshModelDefinitions)
 
 	v8.GET("/observability/logs", s.mgmt.GetLogs)
 	v8.DELETE("/observability/logs", s.mgmt.DeleteLogs)
@@ -57,9 +59,13 @@ func (s *Server) registerManagementV8Routes() {
 	v8.PATCH("/credentials/status", s.mgmt.PatchAuthFileStatus)
 	v8.PATCH("/credentials/fields", s.mgmt.PatchAuthFileFields)
 	v8.POST("/credentials/refresh", s.mgmt.RefreshAuthFiles)
+	v8.POST("/credentials/verify", s.mgmt.VerifyAuthFileV8)
 	v8.POST("/oauth/import", s.mgmt.ImportOAuthV8)
 	v8.GET("/oauth/auth-url", s.mgmt.StartOAuthV8)
+	v8.POST("/oauth/auth-url", s.mgmt.StartOAuthV8)
 	v8.POST("/oauth/siwc/bind", s.mgmt.StartSIWCBind)
+	v8.GET("/oauth/siwc/status", s.mgmt.GetSIWCStatus)
+	v8.GET("/credentials/siwc/status", s.mgmt.GetSIWCStatus)
 	v8.GET("/oauth/status", s.mgmt.GetAuthStatus)
 	v8.DELETE("/oauth/session", s.mgmt.CancelAuthSession)
 
