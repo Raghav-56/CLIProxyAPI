@@ -296,6 +296,15 @@
       refresh.setAttribute('aria-label', `Refresh quota for ${account.email}`);
       refresh.addEventListener('click', () => refreshQuota(account));
       footer.append(select, refresh);
+      const remove = node('button', 'remove-account', 'Remove account');
+      remove.disabled = busy || isSelected;
+      remove.setAttribute('aria-label', `Remove account ${account.email}`);
+      if (isSelected) {
+        remove.title = 'Select another account before removing this one.';
+        body.append(node('p', 'status-line', 'To remove this account, select another account first.'));
+      }
+      remove.addEventListener('click', () => removeAccount(account));
+      footer.append(remove);
       card.append(body, footer);
       cards.push(card);
     }
@@ -329,6 +338,30 @@
       notify('');
       showError(error.message);
       try { if (managementKey) await loadAccounts(); } catch (_) { /* Preserve the original operation error. */ }
+    } finally {
+      busy = false;
+      render();
+    }
+  }
+
+  async function removeAccount(account) {
+    if (busy || (policy.mode === 'manual' && policy.auth_id === account.id)) return;
+    if (!window.confirm(`Remove ${account.email} from this proxy?\n\nThis deletes its saved login. You will need to sign in again to add it back. Your ChatGPT subscription will not be cancelled.`)) return;
+    busy = true;
+    showError('');
+    notify(`Removing ${account.email}…`);
+    render();
+    let removed = false;
+    try {
+      await api('/credentials?name=' + encodeURIComponent(account.name), { method: 'DELETE' });
+      removed = true;
+      accounts = accounts.filter(item => item.id !== account.id);
+      for (const cache of [quotas, quotaErrors, models, modelErrors, expandedModels]) cache.delete(account.id);
+      notify(`${account.email} was removed from this proxy.`);
+      await loadAccounts();
+    } catch (error) {
+      if (!removed) notify('');
+      showError(removed ? `The account was removed, but refreshing failed: ${error.message}` : `Could not remove ${account.email}: ${error.message}`);
     } finally {
       busy = false;
       render();

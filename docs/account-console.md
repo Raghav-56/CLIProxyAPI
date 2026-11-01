@@ -8,6 +8,11 @@ The choice is global to this proxy. Each logical request keeps its choice throug
 Other providers and Codex API-key credentials keep their existing routing behavior.
 Account selection does not rewrite OAuth credentials or restart the server.
 
+Click **Remove account** on a card to delete its saved login from this proxy.
+Confirm the account email before removal. This does not cancel the ChatGPT subscription;
+adding the account back requires another OAuth login. Select another account before
+removing the currently selected account. Failed removals leave the card visible with an error.
+
 All accounts can remain enabled. The selected account is stored in the configuration:
 
 ```yaml

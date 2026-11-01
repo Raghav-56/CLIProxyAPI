@@ -89,3 +89,72 @@ test('request history is bounded and malformed rows are ignored', () => {
   assert.deepEqual(recentRequests({requests:[null,{id:'bad'},{id:'ok',model:'gpt-6.1-sol'}]}), [{id:'ok',model:'gpt-6.1-sol'}]);
   assert.throws(() => recentRequests({}), /invalid request/);
 });
+
+test('removing an account confirms, preserves failures, and deletes only the chosen credential', async () => {
+  const vm = require('node:vm');
+  const fs = require('node:fs');
+  class Element {
+    constructor() { this.children = []; this.dataset = {}; this.listeners = {}; this.style = {}; }
+    append(...children) { this.children.push(...children); }
+    replaceChildren(...children) { this.children = children; }
+    setAttribute() {}
+    addEventListener(event, handler) { this.listeners[event] = handler; }
+    querySelector() { return new Element(); }
+    click() { if (!this.disabled) return this.listeners.click?.(); }
+  }
+  const elements = new Map();
+  const get = id => {
+    if (!elements.has(id)) elements.set(id, new Element());
+    return elements.get(id);
+  };
+  let files = [
+    {id:'selected',name:'selected.json',auth_index:'1',provider:'codex',account_type:'oauth',email:'selected@example.test'},
+    {id:'other',name:'other+account.json',auth_index:'2',provider:'codex',account_type:'oauth',email:'other@example.test'},
+  ];
+  let confirmed = false;
+  let failure = false;
+  const deleted = [];
+  const context = {
+    document: {getElementById:get,createElement:() => new Element(),body:{dataset:{host:'Test proxy'}}},
+    window: {confirm:() => confirmed},
+    sessionStorage: {getItem:() => 'test-key',setItem() {},removeItem() {}},
+    setInterval() {},
+    fetch: async (path, options) => {
+      if (options.method === 'DELETE') {
+        deleted.push(path);
+        if (failure) return {status:500,ok:false,json:async () => ({error:'disk unavailable'})};
+        files = files.filter(file => file.id !== 'other');
+      }
+      const data = path === '/v8/management/credentials' ? {files} :
+        path.endsWith('/routing/codex-account') ? {mode:'manual',auth_id:'selected'} :
+        path.endsWith('/server/info') ? {hostname:'Test proxy'} :
+        path.endsWith('/observability/requests/recent') ? {requests:[]} : {};
+      return {status:200,ok:true,json:async () => data};
+    },
+  };
+  vm.runInNewContext(fs.readFileSync(require.resolve('./accounts.js'), 'utf8'), context);
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  const card = id => get('account-grid').children.find(item => item.dataset.accountId === id);
+  const remove = id => card(id).children[1].children.find(item => item.className === 'remove-account');
+  await settle();
+  assert.equal(remove('selected').disabled, true);
+  await remove('selected').click();
+  assert.equal(deleted.length, 0);
+  await remove('other').click();
+  assert.equal(deleted.length, 0);
+  assert.ok(card('other'));
+  confirmed = true;
+  failure = true;
+  await remove('other').click();
+  assert.ok(card('other'));
+  assert.match(get('page-error').textContent, /disk unavailable/);
+  failure = false;
+  await remove('other').click();
+  assert.equal(card('other'), undefined);
+  assert.equal(get('account-count').textContent, '1');
+  assert.match(get('notice').textContent, /other@example.test was removed/);
+  assert.deepEqual(deleted, [
+    '/v8/management/credentials?name=other%2Baccount.json',
+    '/v8/management/credentials?name=other%2Baccount.json',
+  ]);
+});
