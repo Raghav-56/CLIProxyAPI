@@ -8,55 +8,72 @@
   <script src="/accounts-assets/accounts.js" defer></script>
 </head>
 <body data-host="__PROXY_HOST__">
+  <a class="skip-link" href="#main">Skip to accounts</a>
   <header class="topbar">
-    <a class="brand" href="/accounts.html"><span class="brand-mark" aria-hidden="true">CP</span><span>CLIProxyAPI<span class="brand-sub">Account console</span></span></a>
-    <nav aria-label="Proxy navigation"><a href="/accounts.html" aria-current="page">Accounts</a><a href="/management.html">Advanced settings</a></nav>
-    <button id="logout" class="quiet" hidden>Disconnect</button>
+    <a class="brand" href="/accounts.html"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m5 7 5 5-5 5m8 0h6"/></svg></span><span>CLIProxyAPI<span class="brand-sub">Account console</span></span></a>
+    <nav aria-label="Proxy navigation"><a href="#main" aria-current="page">Accounts</a><a href="#activity">Activity</a><a href="/management.html">Advanced settings</a></nav>
+    <div class="header-actions">
+      <button id="toggle-privacy" class="quiet" aria-pressed="false" hidden>Hide emails</button>
+      <details class="display-settings" id="display-settings">
+        <summary>Display</summary>
+        <div class="display-panel"><label class="appearance" for="appearance">Color theme<select id="appearance"><option value="system">System theme</option><option value="light">Light theme</option><option value="dark">Dark theme</option></select></label><button id="logout" class="secondary" hidden>Disconnect</button></div>
+      </details>
+    </div>
   </header>
-  <main>
+  <main id="main" tabindex="-1">
     <section class="intro">
-      <div><p class="eyebrow">YOUR CODEX SUBSCRIPTIONS</p><h1>Choose your Codex account.</h1><p class="subtitle">Pick an account yourself or let your proxy choose one before its quota resets.</p></div>
-      <div class="host"><span class="host-dot" aria-hidden="true"></span><div><span class="muted small">Proxy host</span><strong id="hostname"></strong></div></div>
+      <div><h1>Accounts and quotas</h1><p class="subtitle">Your Codex subscriptions. Know what is available before you switch.</p></div>
+      <div class="host"><span class="host-dot" aria-hidden="true"></span><span>Host <strong id="hostname"></strong></span></div>
     </section>
     <section id="login-panel" class="login-panel" aria-labelledby="login-title">
-      <div><h2 id="login-title">Connect to your proxy</h2><p>Use the same management key as the main dashboard.</p></div>
+      <span class="login-mark" aria-hidden="true">CP</span>
+      <h2 id="login-title">Connect to your proxy</h2><p>Check account limits, choose a subscription, and see where requests go.</p>
       <form id="login-form">
         <label for="management-key">Management key</label>
-        <div class="login-fields"><input id="management-key" type="password" autocomplete="current-password" required placeholder="Paste your management key"><button type="submit" class="primary">Connect</button></div>
+        <div class="login-fields"><input id="management-key" type="password" autocomplete="current-password" required placeholder="Enter your management key" aria-describedby="key-help"><button type="submit" class="primary">Connect</button></div>
+        <p id="key-help" class="small muted">Use the management key from Advanced settings, not a client API key.</p>
         <label class="remember"><input id="remember" type="checkbox"> Keep signed in for this browser tab</label>
         <p id="login-error" class="error" role="alert" hidden></p>
       </form>
     </section>
     <section id="workspace" hidden>
-      <div class="overview" aria-label="Routing summary">
-        <div><span class="muted small">Selected account</span><strong id="selected-account">Loading…</strong></div>
-        <div><span class="muted small">Routing</span><strong id="routing-mode">Manual selection</strong></div>
-        <div><span class="muted small">Saved accounts</span><strong id="account-count">—</strong></div>
-        <div><span class="muted small">Quota checked</span><strong id="checked-at">Not yet</strong></div>
-      </div>
-      <section class="routing-controls" aria-labelledby="routing-title">
-        <div><h2 id="routing-title">Automatic account selection</h2><p class="muted">Prefer an account with quota available whose longest quota window resets soonest. Each session keeps its account while it remains available.</p><p class="small muted">Applies to Codex subscription pools. Unknown quotas or pools shared with API keys use your standard routing.</p><p id="routing-detail" class="small muted"></p></div>
-        <div class="actions"><button id="use-soonest-reset" class="primary">Use soonest reset</button><button id="use-standard-routing" class="secondary">Use standard routing</button></div>
+      <section class="routing-panel" aria-label="Current routing">
+        <div class="overview" aria-label="Routing summary">
+          <div class="active-account"><span class="muted small">Selected account</span><strong id="selected-account">Loading…</strong></div>
+          <div><span class="muted small">Routing</span><strong id="routing-mode">Manual selection</strong></div>
+          <div><span class="muted small">Saved accounts</span><strong id="account-count">—</strong></div>
+          <div><span class="muted small">Quota checked</span><strong id="checked-at">Not yet</strong></div>
+        </div>
+        <details class="routing-settings" id="routing-settings">
+          <summary>Routing settings<span class="muted">Manual or automatic account selection</span></summary>
+          <div class="routing-controls">
+            <div><h2 id="routing-title">Choose how new requests find an account</h2><p id="routing-detail" class="muted"></p><p class="small muted">Soonest reset prefers usable quota with the earliest reset. Sessions keep their account while available. Unknown quotas and pools shared with API keys use standard routing.</p></div>
+            <div class="actions"><button id="use-soonest-reset" class="primary">Use soonest reset</button><button id="use-standard-routing" class="secondary">Use standard routing</button></div>
+          </div>
+        </details>
       </section>
-      <section class="recommendation" aria-label="Plus account recommendation">
-        <div><p class="eyebrow">PLUS QUOTA GUIDANCE</p><h2 id="recommendation-title">Check Plus quotas for a recommendation</h2><p id="recommendation-detail" class="muted"></p><p class="small muted">Use a recommendation to select one Plus account manually. That choice overrides automatic selection until you switch back.</p></div>
-        <button id="use-recommended" class="primary" hidden>Use recommended account</button>
-      </section>
-      <div class="section-heading"><div><h2>Your accounts</h2><p class="muted">A selection applies to this proxy and the tools connected to it.</p></div><div class="actions"><button id="refresh-accounts" class="secondary">Refresh accounts</button><button id="refresh-quotas" class="primary">Refresh quotas</button></div></div>
+      <div class="section-heading"><div><h2>Your subscriptions</h2><p class="muted">Remaining quota for each account, checked directly with the provider.</p></div><div class="actions"><button id="refresh-accounts" class="secondary">Reload list</button><button id="refresh-quotas" class="primary">Refresh quotas</button><a class="button secondary" href="/management.html#/oauth">Add account</a></div></div>
       <p id="notice" class="notice" role="status" aria-live="polite" hidden></p>
       <p id="page-error" class="error page-error" role="alert" hidden></p>
-      <div id="account-grid" class="account-grid" aria-live="polite"></div>
-      <section class="empty" id="empty" hidden><h2>No Codex accounts yet</h2><p>Add a Codex OAuth login in the management dashboard, then refresh this page.</p><a class="button secondary" href="/management.html#/oauth">Add an account</a></section>
-      <footer class="footnote"><span>Requests keep their account choice through retries. Switching affects new requests.</span><a href="/management.html#/oauth">Add another account</a></footer>
-      <section class="diagnostics" aria-labelledby="requests-title">
-        <div class="section-heading"><div><p class="eyebrow">LIVE ROUTING</p><h2 id="requests-title">Recent request attempts</h2><p class="muted">Actual account, model and transport on <strong id="requests-host"></strong>. Up to 200 attempts since this proxy started.</p></div><button id="refresh-requests" class="secondary">Refresh requests</button></div>
+      <div id="account-grid" class="account-grid"></div>
+      <section class="empty" id="empty" hidden><h2>No Codex accounts yet</h2><p>Add a Codex OAuth login in the management dashboard, then refresh your accounts.</p><a class="button primary" href="/management.html#/oauth">Add your first account</a></section>
+      <section class="recommendation" aria-label="Plus account recommendation">
+        <span class="recommendation-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/></svg></span>
+        <div><h2 id="recommendation-title">Check quotas for a recommendation</h2><p id="recommendation-detail" class="muted"></p></div>
+        <button id="use-recommended" class="secondary" hidden>Use recommended account</button>
+      </section>
+      <p class="footnote">Selecting an account applies to every tool connected to this proxy. Switching affects new requests.</p>
+      <section class="diagnostics" id="activity" aria-labelledby="requests-title">
+        <div class="section-heading"><div><h2 id="requests-title">Request activity</h2><p class="muted">Actual account and transport on <strong id="requests-host"></strong>. Up to 200 attempts since restart.</p></div><button id="refresh-requests" class="secondary">Refresh requests</button></div>
         <p id="requests-error" class="error" role="alert" hidden></p>
-        <p id="requests-empty" class="muted">No inference attempts recorded yet. Send a request from Codex or T3 Code, then refresh.</p>
+        <div class="activity-columns" aria-hidden="true"><span>Model and account</span><span>Result</span><span>Transport</span><span>Duration</span><span>First token</span><span>Tokens</span></div>
+        <p id="requests-empty" class="empty-activity">No requests yet. Send a request from Codex or T3 Code to see its account, transport, and token usage here.</p>
         <div id="request-list" class="request-list"></div>
-        <button id="more-requests" class="quiet" hidden>Show 20 more attempts</button>
-        <p class="small muted"><span id="requests-updated"></span> · Refreshes every 15 seconds while this tab is visible. Retries can appear as separate attempts. Durations are elapsed time for an attempt.</p>
+        <button id="more-requests" class="secondary" hidden>Show 20 more attempts</button>
+        <p class="activity-footnote"><span id="requests-updated"></span><span>Refreshes every 15 seconds while visible. Retries appear as separate attempts.</span></p>
       </section>
     </section>
+    <footer class="page-footer"><span>CLIProxyAPI <span class="muted">/ Account console</span></span><a href="/management.html">Open full management dashboard</a></footer>
   </main>
 </body>
 </html>

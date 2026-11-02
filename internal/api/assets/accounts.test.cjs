@@ -115,7 +115,7 @@ test('removing an account confirms, preserves failures, and deletes only the cho
   let failure = false;
   const deleted = [];
   const context = {
-    document: {getElementById:get,createElement:() => new Element(),body:{dataset:{host:'Test proxy'}}},
+    document: {documentElement:{dataset:{}},getElementById:get,createElement:() => new Element(),body:{dataset:{host:'Test proxy'}}},
     window: {confirm:() => confirmed},
     sessionStorage: {getItem:() => 'test-key',setItem() {},removeItem() {}},
     setInterval() {},
@@ -135,7 +135,8 @@ test('removing an account confirms, preserves failures, and deletes only the cho
   vm.runInNewContext(fs.readFileSync(require.resolve('./accounts.js'), 'utf8'), context);
   const settle = () => new Promise(resolve => setImmediate(resolve));
   const card = id => get('account-grid').children.find(item => item.dataset.accountId === id);
-  const remove = id => card(id).children[1].children.find(item => item.className === 'remove-account');
+  const find = (element, className) => element.className === className ? element : element.children.map(child => find(child, className)).find(Boolean);
+  const remove = id => find(card(id), 'remove-account');
   await settle();
   assert.equal(remove('selected').disabled, true);
   await remove('selected').click();
@@ -149,10 +150,13 @@ test('removing an account confirms, preserves failures, and deletes only the cho
   assert.ok(card('other'));
   assert.match(get('page-error').textContent, /disk unavailable/);
   failure = false;
+  await get('toggle-privacy').click();
+  assert.doesNotMatch(get('page-error').textContent, /other@example\.test/);
   await remove('other').click();
   assert.equal(card('other'), undefined);
   assert.equal(get('account-count').textContent, '1');
-  assert.match(get('notice').textContent, /other@example.test was removed/);
+  assert.match(get('notice').textContent, /Account 2 was removed/);
+  assert.doesNotMatch(get('notice').textContent, /other@example\.test/);
   assert.deepEqual(deleted, [
     '/v8/management/credentials?name=other%2Baccount.json',
     '/v8/management/credentials?name=other%2Baccount.json',
@@ -181,12 +185,14 @@ test('routing controls switch automatic and manual modes, verify application, an
   }));
   const routing = {mode:'manual', auth_id:'first', strategy:'', applied:true, home_enabled:false};
   const puts = [];
+  const preferences = new Map();
   let failSave = false;
   let apply = true;
   const context = {
-    document:{getElementById:get, createElement:() => new Element(), body:{dataset:{host:'Test proxy'}}},
+    document:{documentElement:{dataset:{}},getElementById:get, createElement:() => new Element(), body:{dataset:{host:'Test proxy'}}},
     window:{confirm:() => false},
     sessionStorage:{getItem:() => 'test-key', setItem() {}, removeItem() {}},
+    localStorage:{getItem:key => preferences.get(key), setItem:(key,value) => preferences.set(key,value)},
     setInterval() {},
     fetch:async (path, options) => {
       if (path.endsWith('/routing/codex-account') && options.method === 'PUT') {
@@ -255,4 +261,18 @@ test('routing controls switch automatic and manual modes, verify application, an
   await get('use-standard-routing').click();
   await select('second').click();
   assert.equal(puts.length, 5);
+
+  await get('toggle-privacy').click();
+  assert.equal(get('selected-account').textContent, 'Account 1');
+  const textOf = element => [element.textContent || '', ...element.children.map(textOf)].join(' ');
+  assert.doesNotMatch(textOf(get('account-grid')), /@example\.test/);
+  assert.equal(get('toggle-privacy').attributes['aria-pressed'], 'true');
+  await get('toggle-privacy').click();
+  assert.equal(get('selected-account').textContent, 'first@example.test');
+  get('appearance').listeners.change({target:{value:'dark'}});
+  assert.equal(context.document.documentElement.dataset.theme, 'dark');
+  assert.equal(preferences.get('cliproxy-console-theme'), 'dark');
+  get('appearance').listeners.change({target:{value:'invalid'}});
+  assert.equal(context.document.documentElement.dataset.theme, 'system');
+  assert.equal(puts.length, 5, 'privacy and theme must not change routing');
 });

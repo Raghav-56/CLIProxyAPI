@@ -101,6 +101,10 @@
   let accounts = [];
   let policy = null;
   let busy = false;
+  let emailsHidden = false;
+  let pageErrorMessage = '';
+  let noticeMessage = '';
+  try { emailsHidden = sessionStorage.getItem('cliproxy-console-hide-emails') === 'true'; } catch (_) { /* Privacy works without storage. */ }
   const quotas = new Map();
   const loadingQuota = new Set();
   const quotaErrors = new Map();
@@ -108,10 +112,28 @@
   const loadingModels = new Set();
   const modelErrors = new Map();
   const expandedModels = new Set();
+  const expandedOptions = new Set();
+  let pendingFocusKey = '';
   let diagnosticsLoading = false;
   let diagnosticsRows = [];
   let visibleRequests = 20;
   $('hostname').textContent = document.body.dataset.host || location.hostname;
+
+  function setAppearance(value) {
+    const theme = ['light', 'dark'].includes(value) ? value : 'system';
+    document.documentElement.dataset.theme = theme;
+    $('appearance').value = theme;
+    try { localStorage.setItem('cliproxy-console-theme', theme); } catch (_) { /* Theme still applies without storage. */ }
+  }
+  let savedAppearance = 'system';
+  try { savedAppearance = localStorage.getItem('cliproxy-console-theme') || 'system'; } catch (_) { /* Follow the device theme. */ }
+  setAppearance(savedAppearance);
+  $('toggle-privacy').textContent = emailsHidden ? 'Show emails' : 'Hide emails';
+  $('toggle-privacy').setAttribute('aria-pressed', String(emailsHidden));
+
+  function accountName(account) {
+    return emailsHidden ? `Account ${accounts.findIndex(item => item.id === account.id) + 1}` : account.email;
+  }
 
   function node(tag, className, text) {
     const element = document.createElement(tag);
@@ -121,13 +143,20 @@
   }
 
   function showError(message) {
-    $('page-error').textContent = message;
+    pageErrorMessage = message;
+    $('page-error').textContent = privateText(message);
     $('page-error').hidden = !message;
   }
 
   function notify(message) {
-    $('notice').textContent = message;
+    noticeMessage = message;
+    $('notice').textContent = privateText(message);
     $('notice').hidden = !message;
+  }
+
+  function privateText(message) {
+    if (!emailsHidden) return message;
+    return accounts.reduce((text, account) => text.split(account.email).join(accountName(account)), message);
   }
 
   function disconnect() {
@@ -139,6 +168,10 @@
     models.clear();
     modelErrors.clear();
     expandedModels.clear();
+    expandedOptions.clear();
+    pendingFocusKey = '';
+    pageErrorMessage = '';
+    noticeMessage = '';
     diagnosticsRows = [];
     visibleRequests = 20;
     try { sessionStorage.removeItem(storageKey); } catch (_) { /* Storage may be unavailable. */ }
@@ -146,6 +179,7 @@
     $('workspace').hidden = true;
     $('login-panel').hidden = false;
     $('logout').hidden = true;
+    $('toggle-privacy').hidden = true;
     $('account-grid').replaceChildren();
     $('request-list').replaceChildren();
   }
@@ -180,7 +214,9 @@
   function quotaWindow(window) {
     const section = node('div', 'quota-window' + (window.remaining <= 15 ? ' low' : ''));
     const heading = node('div', 'quota-heading');
-    heading.append(node('span', '', window.label), node('span', 'quota-value', `${Math.round(window.remaining)}% left`));
+    const value = node('span', 'quota-value');
+    value.append(node('strong', '', `${Math.round(window.remaining)}%`), node('span', '', 'remaining'));
+    heading.append(node('span', '', window.label), value);
     const track = node('div', 'quota-track');
     track.setAttribute('role', 'progressbar');
     track.setAttribute('aria-label', `${window.label} remaining`);
@@ -200,7 +236,7 @@
     $('recommendation-title').textContent = recommendation ?
       (recommendation.account.id === selectedId ? 'Your selected Plus account is recommended' : 'A Plus account is ready for your next task') : 'Check Plus quotas for a recommendation';
     $('recommendation-detail').textContent = recommendation ?
-      `${recommendation.account.email} · ${Math.round(recommendation.fiveHour.remaining)}% of 5-hour quota left · ${Math.round(recommendation.weekly.remaining)}% weekly left. ${dateLabel(recommendation.weekly.resetsAt)}.` :
+      `${accountName(recommendation.account)} has ${Math.round(recommendation.fiveHour.remaining)}% of 5-hour quota and ${Math.round(recommendation.weekly.remaining)}% weekly quota left. ${dateLabel(recommendation.weekly.resetsAt)}.` :
       'Recommendations need usable 5-hour and weekly quota checked within five minutes. Refresh after a quota reset.';
     $('use-recommended').hidden = !recommendation || recommendation.account.id === selectedId;
     $('use-recommended').disabled = busy || policy?.home_enabled === true;
@@ -219,8 +255,9 @@
         if (recommendation?.account.id !== card.dataset.accountId) {
           badge?.remove();
         } else if (!badge) {
-          badge = node('p', 'recommendation-badge', 'Recommended · weekly quota resets first');
-          card.querySelector('.account-top').after(badge);
+          badge = node('span', 'badge recommendation-badge', 'Recommended');
+          badge.title = 'Usable Plus quota with the earliest weekly reset';
+          card.querySelector('.account-badges').append(badge);
         }
       }
     }
@@ -229,8 +266,10 @@
 
   function render() {
     if (!managementKey || !policy) return;
+    const activeElement = document.activeElement;
+    const focusKey = activeElement?.dataset?.focusKey || (activeElement === document.body ? pendingFocusKey : '');
     const selected = accounts.find(account => policy.mode === 'manual' && account.id === policy.auth_id);
-    $('selected-account').textContent = selected?.email || (policy.mode === 'manual' ? 'Selected account is missing' : 'No manual selection');
+    $('selected-account').textContent = selected ? accountName(selected) : (policy.mode === 'manual' ? 'Selected account is missing' : 'Chosen automatically');
     const automaticSoonestReset = policy.mode === 'automatic' && policy.strategy === 'soonest-reset';
     const routingLabel = policy.mode === 'manual' ? 'Manual · one account' :
       automaticSoonestReset ? 'Automatic · soonest reset' : 'Automatic · standard routing';
@@ -248,22 +287,30 @@
     const checked = Array.from(quotas.values()).map(quota => quota.fetchedAt);
     $('checked-at').textContent = checked.length ? new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(Math.max(...checked)) : 'Not yet';
     $('refresh-accounts').disabled = busy;
+    $('toggle-privacy').disabled = busy;
     $('refresh-quotas').disabled = busy || loadingQuota.size > 0 || accounts.length === 0;
     $('empty').hidden = accounts.length !== 0;
     const recommendation = renderRecommendation(false);
     const cards = [];
     for (const account of accounts) {
       const isSelected = selected?.id === account.id;
+      const displayName = accountName(account);
       const card = node('article', 'account-card' + (isSelected ? ' selected' : ''));
       card.dataset.accountId = account.id;
       const body = node('div', 'card-body');
       const top = node('div', 'account-top');
-      const avatarText = account.email.split('@')[0].split(/[._-]/).map(word => word.charAt(0)).slice(0, 2).join('').toUpperCase();
-      const badgeText = isSelected ? 'Selected' : account.disabled ? 'Disabled' : account.unavailable ? 'Unavailable' : 'Ready';
-      top.append(node('div', 'avatar', avatarText || 'CX'), node('span', 'badge' + (isSelected ? ' selected' : ''), badgeText));
+      const avatarText = emailsHidden ? String(accounts.indexOf(account) + 1) : account.email.split('@')[0].split(/[._-]/).map(word => word.charAt(0)).slice(0, 2).join('').toUpperCase();
+      const badgeText = isSelected ? 'Selected' : account.disabled ? 'Disabled' : account.unavailable ? 'Unavailable' : 'Enabled';
+      const badges = node('div', 'account-badges');
+      badges.append(node('span', 'badge' + (isSelected ? ' selected' : account.disabled || account.unavailable ? ' warning' : ''), badgeText));
+      top.append(node('div', 'avatar', avatarText || 'CX'), badges);
       const quota = quotas.get(account.id);
-      if (recommendation?.account.id === account.id) body.append(node('p', 'recommendation-badge', 'Recommended · weekly quota resets first'));
-      body.append(top, node('h3', '', account.email), node('p', 'plan', `Codex · ${quota?.plan || account.plan || 'Plan unknown'}`));
+      if (recommendation?.account.id === account.id) {
+        const badge = node('span', 'badge recommendation-badge', 'Recommended');
+        badge.title = 'Usable Plus quota with the earliest weekly reset';
+        badges.append(badge);
+      }
+      body.append(top, node('h3', '', displayName), node('p', 'plan', `Codex · ${quota?.plan || account.plan || 'Plan unknown'}`));
       if (quota?.windows.length) {
         for (const window of quota.windows) body.append(quotaWindow(window));
       } else {
@@ -274,7 +321,9 @@
       if (quota) body.append(node('p', 'quota-time', `Checked ${new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(quota.fetchedAt)}`));
       const modelDetails = node('details', 'model-details');
       modelDetails.open = expandedModels.has(account.id);
-      modelDetails.append(node('summary', '', 'Available models'));
+      const modelSummary = node('summary', '', 'Available models');
+      modelSummary.dataset.focusKey = account.id + ':models';
+      modelDetails.append(modelSummary);
       if (models.has(account.id)) {
         const list = node('ul', 'model-list');
         for (const model of models.get(account.id)) list.append(node('li', '', model));
@@ -294,33 +343,53 @@
           if (!models.has(account.id) && !loadingModels.has(account.id) && !modelErrors.has(account.id)) refreshModels(account);
         } else expandedModels.delete(account.id);
       });
+      if ((quota?.plan || account.plan) === 'go') modelDetails.append(node('p', 'status-line', 'Go has a different model catalog. Choose a listed model in your coding tool.'));
       body.append(modelDetails);
-      if ((quota?.plan || account.plan) === 'go') body.append(node('p', 'status-line', 'Go has a different model catalog. Choose a listed model in your coding tool.'));
       if (account.disabled) body.append(node('p', 'status-line', 'Enable this credential in Advanced settings before selecting it.'));
       else if (account.unavailable) body.append(node('p', 'status-line error', 'The proxy reports this account as unavailable.'));
       const footer = node('div', 'card-footer');
       const select = node('button', 'select-account ' + (isSelected ? 'selected-button' : 'primary'), isSelected ? 'Currently selected' : 'Use this account');
       select.disabled = busy || account.disabled || isSelected || policy.home_enabled === true;
-      select.setAttribute('aria-label', isSelected ? `Selected account ${account.email}` : `Use account ${account.email}`);
+      select.dataset.focusKey = account.id + ':select';
+      select.setAttribute('aria-label', isSelected ? `Selected account ${displayName}` : `Use account ${displayName}`);
       select.addEventListener('click', () => selectAccount(account));
       const refresh = node('button', 'refresh-quota', loadingQuota.has(account.id) ? 'Checking…' : 'Refresh');
       refresh.disabled = busy || loadingQuota.has(account.id);
-      refresh.setAttribute('aria-label', `Refresh quota for ${account.email}`);
+      refresh.dataset.focusKey = account.id + ':refresh';
+      refresh.setAttribute('aria-label', `Refresh quota for ${displayName}`);
       refresh.addEventListener('click', () => refreshQuota(account));
       footer.append(select, refresh);
       const remove = node('button', 'remove-account', 'Remove account');
       remove.disabled = busy || isSelected;
-      remove.setAttribute('aria-label', `Remove account ${account.email}`);
+      remove.dataset.focusKey = account.id + ':remove';
+      remove.setAttribute('aria-label', `Remove account ${displayName}`);
+      const options = node('details', 'account-options');
+      options.open = expandedOptions.has(account.id);
+      const optionsSummary = node('summary', '', 'Account options');
+      optionsSummary.dataset.focusKey = account.id + ':options';
+      options.append(optionsSummary);
+      options.addEventListener('toggle', () => {
+        if (!options.isConnected) return;
+        if (options.open) expandedOptions.add(account.id);
+        else expandedOptions.delete(account.id);
+      });
       if (isSelected) {
         remove.title = 'Select another account before removing this one.';
-        body.append(node('p', 'status-line', 'To remove this account, select another account first.'));
+        options.append(node('p', 'status-line', 'Select another account before removing this saved login.'));
       }
       remove.addEventListener('click', () => removeAccount(account));
-      footer.append(remove);
+      options.append(remove);
+      body.append(options);
       card.append(body, footer);
       cards.push(card);
     }
     $('account-grid').replaceChildren(...cards);
+    pendingFocusKey = '';
+    if (focusKey) {
+      const replacement = Array.from($('account-grid').querySelectorAll('[data-focus-key]')).find(element => element.dataset.focusKey === focusKey);
+      if (replacement && !replacement.disabled) replacement.focus({preventScroll: true});
+      else if (replacement) pendingFocusKey = focusKey;
+    }
   }
 
   async function loadAccounts() {
@@ -386,22 +455,23 @@
 
   async function removeAccount(account) {
     if (busy || (policy.mode === 'manual' && policy.auth_id === account.id)) return;
-    if (!window.confirm(`Remove ${account.email} from this proxy?\n\nThis deletes its saved login. You will need to sign in again to add it back. Your ChatGPT subscription will not be cancelled.`)) return;
+    const displayName = accountName(account);
+    if (!window.confirm(`Remove ${displayName} from this proxy?\n\nThis deletes its saved login. You will need to sign in again to add it back. Your ChatGPT subscription will not be cancelled.`)) return;
     busy = true;
     showError('');
-    notify(`Removing ${account.email}…`);
+    notify(`Removing ${displayName}…`);
     render();
     let removed = false;
     try {
       await api('/credentials?name=' + encodeURIComponent(account.name), { method: 'DELETE' });
       removed = true;
       accounts = accounts.filter(item => item.id !== account.id);
-      for (const cache of [quotas, quotaErrors, models, modelErrors, expandedModels]) cache.delete(account.id);
-      notify(`${account.email} was removed from this proxy.`);
+      for (const cache of [quotas, quotaErrors, models, modelErrors, expandedModels, expandedOptions]) cache.delete(account.id);
+      notify(`${displayName} was removed from this proxy.`);
       await loadAccounts();
     } catch (error) {
       if (!removed) notify('');
-      showError(removed ? `The account was removed, but refreshing failed: ${error.message}` : `Could not remove ${account.email}: ${error.message}`);
+      showError(removed ? `The account was removed, but refreshing failed: ${error.message}` : `Could not remove ${displayName}: ${error.message}`);
     } finally {
       busy = false;
       render();
@@ -471,6 +541,7 @@
       $('login-panel').hidden = true;
       $('workspace').hidden = false;
       $('logout').hidden = false;
+      $('toggle-privacy').hidden = false;
       if ($('remember').checked) {
         try { sessionStorage.setItem(storageKey, managementKey); } catch (_) { /* Connected without storage. */ }
       }
@@ -490,29 +561,29 @@
   }
 
   function renderRequests(rows) {
+    const transportLabel = value => ({websocket: 'WS', http: 'HTTP', sse: 'SSE'}[value] || 'Unknown');
     const cards = rows.slice(0, visibleRequests).map(row => {
       const card = node('article', 'request-row');
-      const title = node('div', 'request-title');
+      const identity = node('div', 'request-identity');
       const timestamp = new Date(row.requested_at);
       const time = Number.isFinite(timestamp.getTime()) ? new Intl.DateTimeFormat(undefined, {hour:'2-digit', minute:'2-digit', second:'2-digit'}).format(timestamp) : 'Time unknown';
-      title.append(node('strong', '', row.model), node('span', row.success ? 'request-result' : 'request-result failed', row.success ? 'Completed' : 'Failed'), node('span', 'muted small', time));
-      const route = node('p', 'request-route');
       const knownAccount = accounts.find(account => account.id === row.auth_id);
-      route.textContent = `${knownAccount?.email || row.account || row.auth_id || 'Account unknown'} · ${row.provider || 'Provider unknown'}`;
-      const metrics = node('dl', 'request-metrics');
+      const displayName = knownAccount ? accountName(knownAccount) : emailsHidden ? 'Unknown account' : row.account || row.auth_id || 'Unknown account';
+      identity.append(node('strong', '', row.model), node('p', 'request-route', `${displayName} · ${time}`));
+      card.append(identity, node('span', row.success ? 'request-status request-result' : 'request-status request-result failed', row.success ? 'Completed' : 'Failed'));
       const pairs = [
-        ['Transport', `${row.downstream_transport || 'unknown'} → ${row.upstream_transport || 'unknown'}`],
+        ['Transport', `${transportLabel(row.downstream_transport)} → ${transportLabel(row.upstream_transport)}`],
         ['Duration', metric(row.latency_ms, ' ms')],
         ['First token', metric(row.ttft_ms, ' ms')],
-        ['Cached input', row.usage_known ? metric(row.cached_input_tokens) : 'Unknown'],
-        ['Input / output', row.usage_known ? `${metric(row.input_tokens)} / ${metric(row.output_tokens)}` : 'Unknown'],
+        ['Input / output tokens', row.usage_known ? `${metric(row.input_tokens)} / ${metric(row.output_tokens)}` : 'Unknown'],
       ];
       for (const [label, value] of pairs) {
-        const pair = node('div');
-        pair.append(node('dt', '', label), node('dd', '', value));
-        metrics.append(pair);
+        const pair = node('dl', 'request-cell');
+        const detail = node('dd', '', value);
+        if (label === 'Input / output tokens' && row.usage_known) detail.append(node('small', '', `${metric(row.cached_input_tokens)} cached input`));
+        pair.append(node('dt', 'cell-label', label), detail);
+        card.append(pair);
       }
-      card.append(title, route, metrics);
       return card;
     });
     $('request-list').replaceChildren(...cards);
@@ -549,6 +620,24 @@
     if (managementKey) connect();
   });
   $('logout').addEventListener('click', disconnect);
+  $('appearance').addEventListener('change', event => setAppearance(event.target.value));
+  $('display-settings').addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+      $('display-settings').open = false;
+      $('display-settings').querySelector('summary').focus();
+    }
+  });
+  $('toggle-privacy').addEventListener('click', () => {
+    emailsHidden = !emailsHidden;
+    $('toggle-privacy').textContent = emailsHidden ? 'Show emails' : 'Hide emails';
+    $('toggle-privacy').setAttribute('aria-pressed', String(emailsHidden));
+    try { sessionStorage.setItem('cliproxy-console-hide-emails', String(emailsHidden)); } catch (_) { /* Apply for this page only. */ }
+    notify(noticeMessage);
+    showError(pageErrorMessage);
+    render();
+    renderRequests(diagnosticsRows);
+  });
+
   $('use-soonest-reset').addEventListener('click', () => selectAutomaticRouting('soonest-reset'));
   $('use-standard-routing').addEventListener('click', () => selectAutomaticRouting(''));
   $('refresh-accounts').addEventListener('click', async () => {

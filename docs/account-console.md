@@ -9,10 +9,14 @@ The choice is global to this proxy. Each logical request keeps its choice throug
 Other providers and Codex API-key credentials keep their existing routing behavior.
 Account selection does not rewrite OAuth credentials or restart the server.
 
-Click **Remove account** on a card to delete its saved login from this proxy.
+Open **Account options** on a card, then click **Remove account** to delete its saved login from this proxy.
 Confirm the account email before removal. This does not cancel the ChatGPT subscription;
 adding the account back requires another OAuth login. Select another account before
 removing the currently selected account. Failed removals leave the card visible with an error.
+
+Open **Routing settings** to switch between manual selection, soonest-reset routing, and standard routing.
+Use **Hide emails** to mask account identities in the cards, recommendation, and request activity for this browser tab.
+Open **Display** to choose a light, dark, or system theme, or to disconnect. The theme preference stays in this browser.
 
 All accounts can remain enabled. The selected account is stored in the configuration:
 
@@ -101,7 +105,7 @@ Click **Use recommended account** to apply the recommendation. Guidance never ch
 
 ## Inspect actual routing
 
-**Recent request attempts** shows the account, model, downstream and upstream transport, elapsed time,
+**Request activity** shows the account, model, downstream and upstream transport, elapsed time,
 time to first token, and input/output/cached-input tokens observed by the execution usage reporter.
 Retries can produce multiple attempts. A successful attempt describes executor completion; it does not prove
 that a disconnected client received the answer. Unknown token counts or first-token times remain unknown.
