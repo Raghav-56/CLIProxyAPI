@@ -11,11 +11,11 @@ import (
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 )
 
-func codexAccountRoutingState(id string) gin.H {
+func codexAccountRoutingState(id, strategy string) gin.H {
 	if id == "" {
-		return gin.H{"mode": "automatic", "auth_id": nil}
+		return gin.H{"mode": "automatic", "auth_id": nil, "strategy": strategy}
 	}
-	return gin.H{"mode": "manual", "auth_id": id}
+	return gin.H{"mode": "manual", "auth_id": id, "strategy": strategy}
 }
 
 func (h *Handler) GetCodexAccountRouting(c *gin.Context) {
@@ -25,8 +25,9 @@ func (h *Handler) GetCodexAccountRouting(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "routing is unavailable"})
 		return
 	}
-	state := codexAccountRoutingState(h.cfg.Routing.CodexOAuthAuthID)
-	state["applied"] = h.authManager.CodexOAuthAuthID() == h.cfg.Routing.CodexOAuthAuthID
+	state := codexAccountRoutingState(h.cfg.Routing.CodexOAuthAuthID, h.cfg.Routing.CodexOAuthStrategy)
+	state["applied"] = h.authManager.CodexOAuthAuthID() == h.cfg.Routing.CodexOAuthAuthID && h.authManager.CodexOAuthStrategy() == h.cfg.Routing.CodexOAuthStrategy
+	state["home_enabled"] = h.authManager.HomeEnabled()
 	c.JSON(http.StatusOK, state)
 }
 
@@ -43,6 +44,12 @@ func (h *Handler) PutCodexAccountRouting(c *gin.Context) {
 		return
 	}
 	id = strings.TrimSpace(id)
+	var strategy string
+	rawStrategy, hasStrategy := body["strategy"]
+	if hasStrategy && (string(rawStrategy) == "null" || json.Unmarshal(rawStrategy, &strategy) != nil || (config.RoutingConfig{CodexOAuthStrategy: strategy}).Validate() != nil) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "strategy must be an empty string or soonest-reset"})
+		return
+	}
 	h.mu.Lock()
 	if h.cfg == nil || h.authManager == nil {
 		h.mu.Unlock()
@@ -50,6 +57,14 @@ func (h *Handler) PutCodexAccountRouting(c *gin.Context) {
 		return
 	}
 	manager := h.authManager
+	if !hasStrategy {
+		strategy = h.cfg.Routing.CodexOAuthStrategy
+	}
+	if manager.HomeEnabled() && (id != "" || strategy != "") {
+		h.mu.Unlock()
+		c.JSON(http.StatusConflict, gin.H{"error": "local Codex account routing is unavailable while Home is enabled"})
+		return
+	}
 	if id != "" {
 		target, ok := manager.GetByID(id)
 		if !ok {
@@ -67,35 +82,31 @@ func (h *Handler) PutCodexAccountRouting(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{"error": "account is disabled; enable it before selecting"})
 			return
 		}
-		if manager.HomeEnabled() {
-			h.mu.Unlock()
-			c.JSON(http.StatusConflict, gin.H{"error": "manual account routing is unavailable while Home is enabled"})
-			return
-		}
 	}
-	previous := h.cfg.Routing.CodexOAuthAuthID
-	if previous == id {
+	previous := h.cfg.Routing
+	if previous.CodexOAuthAuthID == id && previous.CodexOAuthStrategy == strategy {
 		h.mu.Unlock()
-		if manager.CodexOAuthAuthID() != id {
+		if manager.CodexOAuthAuthID() != id || manager.CodexOAuthStrategy() != strategy {
 			c.JSON(http.StatusConflict, gin.H{"error": "saved routing has not been applied", "saved": true})
 			return
 		}
-		c.JSON(http.StatusOK, codexAccountRoutingState(id))
+		c.JSON(http.StatusOK, codexAccountRoutingState(id, strategy))
 		return
 	}
 	h.cfg.Routing.CodexOAuthAuthID = id
+	h.cfg.Routing.CodexOAuthStrategy = strategy
 	snapshot, ok := h.saveConfigAndSnapshotLocked(c)
 	if !ok {
-		h.cfg.Routing.CodexOAuthAuthID = previous
+		h.cfg.Routing = previous
 		h.mu.Unlock()
 		return
 	}
 	h.mu.Unlock()
 	h.reloadConfigAfterManagementSave(context.WithoutCancel(c.Request.Context()), snapshot)
 	saved, err := config.LoadConfig(h.configFilePath)
-	if err != nil || saved.Routing.CodexOAuthAuthID != id || manager.CodexOAuthAuthID() != id {
+	if err != nil || saved.Routing.CodexOAuthAuthID != id || saved.Routing.CodexOAuthStrategy != strategy || manager.CodexOAuthAuthID() != id || manager.CodexOAuthStrategy() != strategy {
 		c.JSON(http.StatusConflict, gin.H{"error": "routing saved but disk or runtime verification failed", "saved": true})
 		return
 	}
-	c.JSON(http.StatusOK, codexAccountRoutingState(id))
+	c.JSON(http.StatusOK, codexAccountRoutingState(id, strategy))
 }

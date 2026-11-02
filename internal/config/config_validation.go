@@ -3,10 +3,20 @@ package config
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 )
+
+func (cfg RoutingConfig) Validate() error {
+	switch cfg.CodexOAuthStrategy {
+	case "", "soonest-reset":
+		return nil
+	default:
+		return fmt.Errorf("routing.codex-oauth-strategy must be empty or soonest-reset")
+	}
+}
 
 // SanitizePayloadRules validates raw JSON payload rule params and drops invalid rules.
 func (cfg *Config) SanitizePayloadRules() {

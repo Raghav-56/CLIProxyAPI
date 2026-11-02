@@ -2,6 +2,7 @@ package management
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
@@ -12,6 +13,89 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestCodexAutomaticRoutingSwitchesAndPreservesManualOverride(t *testing.T) {
+	h, path := accountPolicyHandler(t)
+	for _, step := range []struct {
+		body     string
+		id       string
+		strategy string
+		mode     string
+	}{
+		{`{"auth_id":null,"strategy":"soonest-reset"}`, "", "soonest-reset", "automatic"},
+		{`{"auth_id":"b"}`, "b", "soonest-reset", "manual"},
+		{`{"auth_id":null}`, "", "soonest-reset", "automatic"},
+		{`{"auth_id":null,"strategy":""}`, "", "", "automatic"},
+	} {
+		r := policyPUT(h, step.body)
+		if r.Code != http.StatusOK {
+			t.Fatalf("switch %s: %d %s", step.body, r.Code, r.Body)
+		}
+		var result struct {
+			Mode     string `json:"mode"`
+			Strategy string `json:"strategy"`
+		}
+		if err := json.Unmarshal(r.Body.Bytes(), &result); err != nil || result.Mode != step.mode || result.Strategy != step.strategy {
+			t.Fatalf("wrong mode after %s: %s %v", step.body, r.Body, err)
+		}
+		disk, err := config.LoadConfig(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if disk.Routing.CodexOAuthAuthID != step.id || disk.Routing.CodexOAuthStrategy != step.strategy || h.authManager.CodexOAuthAuthID() != step.id || h.authManager.CodexOAuthStrategy() != step.strategy {
+			t.Fatalf("disk/runtime choice differs after %s", step.body)
+		}
+	}
+}
+
+func TestCodexAutomaticRoutingRejectsInvalidStrategyAndHome(t *testing.T) {
+	h, path := accountPolicyHandler(t)
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, strategy := range []string{`null`, `42`, `"round-robin"`, `{}`, `" soonest-reset "`} {
+		r := policyPUT(h, `{"auth_id":null,"strategy":`+strategy+`}`)
+		if r.Code != http.StatusBadRequest {
+			t.Fatalf("accepted strategy %s: %d %s", strategy, r.Code, r.Body)
+		}
+	}
+	homeCfg := h.cfg.CloneForRuntime()
+	homeCfg.Home.Enabled = true
+	h.authManager.SetConfig(homeCfg)
+	r := policyPUT(h, `{"auth_id":null,"strategy":"soonest-reset"}`)
+	if r.Code != http.StatusConflict {
+		t.Fatalf("Home accepted local automatic routing: %d %s", r.Code, r.Body)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || string(after) != string(before) || h.cfg.Routing.CodexOAuthStrategy != "" {
+		t.Fatalf("rejected policy changed saved configuration: %v", err)
+	}
+}
+
+func TestCodexAutomaticRoutingDetectsRuntimeMismatchAndRollsBackSaveFailure(t *testing.T) {
+	h, path := accountPolicyHandler(t)
+	h.configFilePath = filepath.Join(path, "missing.yaml")
+	r := policyPUT(h, `{"auth_id":null,"strategy":"soonest-reset"}`)
+	if r.Code != http.StatusInternalServerError || h.cfg.Routing.CodexOAuthStrategy != "" || h.authManager.CodexOAuthStrategy() != "" {
+		t.Fatalf("failed save changed automatic policy: %d %s", r.Code, r.Body)
+	}
+	h.configFilePath = path
+	h.SetConfigReloadHook(func(context.Context, *config.Config) {})
+	r = policyPUT(h, `{"auth_id":null,"strategy":"soonest-reset"}`)
+	if r.Code != http.StatusConflict {
+		t.Fatalf("missed strategy-only runtime mismatch: %d %s", r.Code, r.Body)
+	}
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	h.GetCodexAccountRouting(c)
+	var state struct {
+		Applied bool `json:"applied"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &state); err != nil || state.Applied {
+		t.Fatalf("GET falsely reports routing applied: %s %v", rec.Body, err)
+	}
+}
 
 func accountPolicyHandler(t *testing.T) (*Handler, string) {
 	t.Helper()

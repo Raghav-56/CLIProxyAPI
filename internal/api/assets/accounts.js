@@ -203,7 +203,7 @@
       `${recommendation.account.email} · ${Math.round(recommendation.fiveHour.remaining)}% of 5-hour quota left · ${Math.round(recommendation.weekly.remaining)}% weekly left. ${dateLabel(recommendation.weekly.resetsAt)}.` :
       'Recommendations need usable 5-hour and weekly quota checked within five minutes. Refresh after a quota reset.';
     $('use-recommended').hidden = !recommendation || recommendation.account.id === selectedId;
-    $('use-recommended').disabled = busy;
+    $('use-recommended').disabled = busy || policy?.home_enabled === true;
     $('use-recommended').onclick = recommendation ? () => {
       const current = recommendPlusAccount(accounts, quotas, Date.now());
       if (current?.account.id !== recommendation.account.id) {
@@ -231,7 +231,19 @@
     if (!managementKey || !policy) return;
     const selected = accounts.find(account => policy.mode === 'manual' && account.id === policy.auth_id);
     $('selected-account').textContent = selected?.email || (policy.mode === 'manual' ? 'Selected account is missing' : 'No manual selection');
-    $('routing-mode').textContent = policy.mode === 'manual' ? 'Manual · one account' : 'Existing routing strategy';
+    const automaticSoonestReset = policy.mode === 'automatic' && policy.strategy === 'soonest-reset';
+    const routingLabel = policy.mode === 'manual' ? 'Manual · one account' :
+      automaticSoonestReset ? 'Automatic · soonest reset' : 'Automatic · standard routing';
+    $('routing-mode').textContent = routingLabel + (policy.applied === false ? ' · pending' : '');
+    $('routing-detail').textContent = policy.home_enabled ? 'Account selection is managed by Home. Local automatic and manual selection are unavailable.' :
+      policy.applied === false ? 'Saved routing has not reached the running proxy. Refresh accounts before relying on this choice.' :
+      policy.mode === 'manual' ? 'Your manual account stays selected until you choose an automatic mode.' :
+      automaticSoonestReset ? 'The proxy checks quotas even with this page closed. Choose any account below to return to manual selection.' :
+      'Your configured routing strategy chooses accounts. Choose any account below to select it manually.';
+    $('use-soonest-reset').disabled = busy || policy.home_enabled === true || automaticSoonestReset;
+    $('use-standard-routing').disabled = busy || policy.home_enabled === true || (policy.mode === 'automatic' && !automaticSoonestReset);
+    $('use-soonest-reset').setAttribute('aria-pressed', String(automaticSoonestReset));
+    $('use-standard-routing').setAttribute('aria-pressed', String(policy.mode === 'automatic' && !automaticSoonestReset));
     $('account-count').textContent = String(accounts.length);
     const checked = Array.from(quotas.values()).map(quota => quota.fetchedAt);
     $('checked-at').textContent = checked.length ? new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(Math.max(...checked)) : 'Not yet';
@@ -288,7 +300,7 @@
       else if (account.unavailable) body.append(node('p', 'status-line error', 'The proxy reports this account as unavailable.'));
       const footer = node('div', 'card-footer');
       const select = node('button', 'select-account ' + (isSelected ? 'selected-button' : 'primary'), isSelected ? 'Currently selected' : 'Use this account');
-      select.disabled = busy || account.disabled || isSelected;
+      select.disabled = busy || account.disabled || isSelected || policy.home_enabled === true;
       select.setAttribute('aria-label', isSelected ? `Selected account ${account.email}` : `Use account ${account.email}`);
       select.addEventListener('click', () => selectAccount(account));
       const refresh = node('button', 'refresh-quota', loadingQuota.has(account.id) ? 'Checking…' : 'Refresh');
@@ -314,7 +326,10 @@
   async function loadAccounts() {
     const [list, routing, server] = await Promise.all([api('/credentials'), api('/routing/codex-account'), api('/server/info')]);
     const parsed = codexAccounts(list?.files);
-    if (!routing || !['manual', 'automatic'].includes(routing.mode)) throw new Error('The proxy returned an invalid routing choice.');
+    if (!routing || !['manual', 'automatic'].includes(routing.mode) ||
+        (routing.strategy !== undefined && !['', 'soonest-reset'].includes(routing.strategy))) {
+      throw new Error('The proxy returned an invalid routing choice.');
+    }
     accounts = parsed;
     policy = routing;
     if (typeof server?.hostname === 'string' && server.hostname) $('hostname').textContent = server.hostname;
@@ -322,7 +337,7 @@
   }
 
   async function selectAccount(account) {
-    if (busy) return;
+    if (busy || policy?.home_enabled === true) return;
     busy = true;
     showError('');
     notify(`Selecting ${account.email}…`);
@@ -334,6 +349,31 @@
         throw new Error('The selected account has not reached the running proxy. Refresh accounts and try again.');
       }
       notify(`${account.email} is selected. Your tools keep the same proxy address.`);
+    } catch (error) {
+      notify('');
+      showError(error.message);
+      try { if (managementKey) await loadAccounts(); } catch (_) { /* Preserve the original operation error. */ }
+    } finally {
+      busy = false;
+      render();
+    }
+  }
+
+  async function selectAutomaticRouting(strategy) {
+    if (busy || policy?.home_enabled === true) return;
+    busy = true;
+    showError('');
+    notify('Updating automatic account selection…');
+    render();
+    try {
+      await api('/routing/codex-account', { method: 'PUT', body: JSON.stringify({ auth_id: null, strategy }) });
+      await loadAccounts();
+      if (policy.mode !== 'automatic' || (policy.strategy || '') !== strategy || policy.applied === false) {
+        throw new Error('Automatic routing has not reached the running proxy. Refresh accounts and try again.');
+      }
+      notify(strategy === 'soonest-reset' ?
+        'Soonest-reset routing is active. New sessions prefer available quota before its reset.' :
+        'Standard routing is active. Your configured strategy chooses accounts for new sessions.');
     } catch (error) {
       notify('');
       showError(error.message);
@@ -509,6 +549,8 @@
     if (managementKey) connect();
   });
   $('logout').addEventListener('click', disconnect);
+  $('use-soonest-reset').addEventListener('click', () => selectAutomaticRouting('soonest-reset'));
+  $('use-standard-routing').addEventListener('click', () => selectAutomaticRouting(''));
   $('refresh-accounts').addEventListener('click', async () => {
     busy = true;
     showError('');

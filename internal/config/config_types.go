@@ -484,6 +484,9 @@ type QuotaExceeded struct {
 // RoutingConfig configures how credentials are selected for requests.
 type RoutingConfig struct {
 	CodexOAuthAuthID string `yaml:"codex-oauth-auth-id" json:"codex-oauth-auth-id,omitempty"`
+	// CodexOAuthStrategy optionally ranks new Codex OAuth sessions by quota reset.
+	// A manual CodexOAuthAuthID overrides this preference.
+	CodexOAuthStrategy string `yaml:"codex-oauth-strategy" json:"codex-oauth-strategy,omitempty"`
 	// Strategy selects the credential selection strategy.
 	// Supported values: "round-robin" (default), "weighted-round-robin", "fill-first".
 	Strategy string `yaml:"strategy,omitempty" json:"strategy,omitempty"`

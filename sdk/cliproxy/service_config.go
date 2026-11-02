@@ -57,6 +57,7 @@ type configCommit struct {
 
 type routingRuntimeState struct {
 	strategy                 string
+	codexOAuthStrategy       string
 	sessionAffinity          bool
 	sessionAffinityTTL       time.Duration
 	sessionAffinitySubagents bool
@@ -72,6 +73,9 @@ func normalizedRoutingRuntimeState(cfg *config.Config) routingRuntimeState {
 	}
 	if cfg == nil {
 		return state
+	}
+	if !cfg.Home.Enabled {
+		state.codexOAuthStrategy = cfg.Routing.CodexOAuthStrategy
 	}
 
 	switch strings.ToLower(strings.TrimSpace(cfg.Routing.Strategy)) {
@@ -107,6 +111,9 @@ func newRoutingSelector(state routingRuntimeState) coreauth.Selector {
 		selector = &coreauth.FillFirstSelector{}
 	default:
 		selector = &coreauth.RoundRobinSelector{}
+	}
+	if state.codexOAuthStrategy == "soonest-reset" {
+		selector = coreauth.NewCodexQuotaSelector(selector)
 	}
 	if state.sessionAffinity {
 		subagents := state.sessionAffinitySubagents
@@ -149,6 +156,10 @@ func (s *Service) commitConfigUpdate(newCfg *config.Config) configCommit {
 	}
 	if errValidate := newCfg.ValidateCredentialWeights(); errValidate != nil {
 		log.WithError(errValidate).Warn("rejected config update with invalid credential weights")
+		return configCommit{}
+	}
+	if errValidate := newCfg.Routing.Validate(); errValidate != nil {
+		log.WithError(errValidate).Warn("rejected config update with invalid Codex OAuth routing strategy")
 		return configCommit{}
 	}
 

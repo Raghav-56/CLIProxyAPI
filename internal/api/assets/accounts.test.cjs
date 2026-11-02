@@ -158,3 +158,101 @@ test('removing an account confirms, preserves failures, and deletes only the cho
     '/v8/management/credentials?name=other%2Baccount.json',
   ]);
 });
+
+test('routing controls switch automatic and manual modes, verify application, and respect Home', async () => {
+  const vm = require('node:vm');
+  const fs = require('node:fs');
+  class Element {
+    constructor() { this.children = []; this.dataset = {}; this.listeners = {}; this.style = {}; this.attributes = {}; }
+    append(...children) { this.children.push(...children); }
+    replaceChildren(...children) { this.children = children; }
+    setAttribute(name, value) { this.attributes[name] = value; }
+    addEventListener(event, handler) { this.listeners[event] = handler; }
+    querySelector() { return new Element(); }
+    click() { if (!this.disabled) return this.listeners.click?.(); }
+  }
+  const elements = new Map();
+  const get = id => {
+    if (!elements.has(id)) elements.set(id, new Element());
+    return elements.get(id);
+  };
+  const files = ['first', 'second'].map((id, index) => ({
+    id, name:id + '.json', auth_index:String(index), provider:'codex', account_type:'oauth', email:id + '@example.test',
+  }));
+  const routing = {mode:'manual', auth_id:'first', strategy:'', applied:true, home_enabled:false};
+  const puts = [];
+  let failSave = false;
+  let apply = true;
+  const context = {
+    document:{getElementById:get, createElement:() => new Element(), body:{dataset:{host:'Test proxy'}}},
+    window:{confirm:() => false},
+    sessionStorage:{getItem:() => 'test-key', setItem() {}, removeItem() {}},
+    setInterval() {},
+    fetch:async (path, options) => {
+      if (path.endsWith('/routing/codex-account') && options.method === 'PUT') {
+        const choice = JSON.parse(options.body);
+        puts.push(choice);
+        if (failSave) return {status:500, ok:false, json:async () => ({error:'disk unavailable'})};
+        routing.auth_id = choice.auth_id;
+        routing.mode = choice.auth_id ? 'manual' : 'automatic';
+        if ('strategy' in choice) routing.strategy = choice.strategy;
+        routing.applied = apply;
+      }
+      const data = path.endsWith('/credentials') ? {files} :
+        path.endsWith('/routing/codex-account') ? {...routing} :
+        path.endsWith('/server/info') ? {hostname:'Test proxy'} :
+        path.endsWith('/observability/requests/recent') ? {requests:[]} :
+        path.endsWith('/requests/api-call') ? {status_code:200, body:'{"rate_limit":{}}'} : {};
+      return {status:200, ok:true, json:async () => data};
+    },
+  };
+  vm.runInNewContext(fs.readFileSync(require.resolve('./accounts.js'), 'utf8'), context);
+  await new Promise(resolve => setImmediate(resolve));
+  const select = id => get('account-grid').children.find(card => card.dataset.accountId === id)
+    .children[1].children.find(button => button.className.startsWith('select-account '));
+
+  assert.equal(get('routing-mode').textContent, 'Manual · one account');
+  await get('use-soonest-reset').click();
+  assert.deepEqual(puts[0], {auth_id:null, strategy:'soonest-reset'});
+  assert.equal(get('routing-mode').textContent, 'Automatic · soonest reset');
+  assert.equal(get('use-soonest-reset').attributes['aria-pressed'], 'true');
+  assert.match(get('notice').textContent, /Soonest-reset routing is active/);
+  assert.match(get('routing-detail').textContent, /page closed/);
+
+  await select('second').click();
+  assert.deepEqual(puts[1], {auth_id:'second'});
+  assert.equal(routing.strategy, 'soonest-reset');
+  assert.equal(get('routing-mode').textContent, 'Manual · one account');
+  assert.equal(get('selected-account').textContent, 'second@example.test');
+  assert.equal(get('use-soonest-reset').disabled, false);
+
+  await get('use-standard-routing').click();
+  assert.deepEqual(puts[2], {auth_id:null, strategy:''});
+  assert.equal(get('routing-mode').textContent, 'Automatic · standard routing');
+  assert.equal(get('use-standard-routing').disabled, true);
+  failSave = true;
+  await get('use-soonest-reset').click();
+  assert.equal(get('routing-mode').textContent, 'Automatic · standard routing');
+  assert.equal(get('notice').hidden, true);
+  assert.match(get('page-error').textContent, /disk unavailable/);
+
+  failSave = false;
+  apply = false;
+  await get('use-soonest-reset').click();
+  assert.equal(get('routing-mode').textContent, 'Automatic · soonest reset · pending');
+  assert.equal(get('notice').hidden, true);
+  assert.match(get('page-error').textContent, /has not reached the running proxy/);
+  assert.match(get('routing-detail').textContent, /has not reached the running proxy/);
+
+  Object.assign(routing, {mode:'manual', auth_id:'first', applied:true, home_enabled:true});
+  await get('refresh-accounts').click();
+  assert.equal(get('use-soonest-reset').disabled, true);
+  assert.equal(get('use-standard-routing').disabled, true);
+  assert.equal(get('use-recommended').disabled, true);
+  assert.equal(select('second').disabled, true);
+  assert.match(get('routing-detail').textContent, /managed by Home/);
+  await get('use-soonest-reset').click();
+  await get('use-standard-routing').click();
+  await select('second').click();
+  assert.equal(puts.length, 5);
+});

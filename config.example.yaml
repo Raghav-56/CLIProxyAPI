@@ -161,6 +161,11 @@ access:
 # Routing strategy for selecting credentials when multiple match.
 routing:
   strategy: "round-robin" # round-robin (default), weighted-round-robin, fill-first
+  # Optional Codex OAuth preference for new sessions. Empty preserves strategy above.
+  # Ranks fresh usable quota by the longest reported window's next reset.
+  # Existing sessions stay sticky. Unknown quotas and mixed API-key/provider pools use strategy above.
+  # A manual codex-oauth-auth-id always takes precedence. Unavailable with Home.
+  # codex-oauth-strategy: "soonest-reset"
   # weighted-round-robin uses each credential's integer weight (default 1, maximum 1,000,000).
   # Non-positive weights exclude the credential while this strategy is active.
   # For OAuth/file credentials, add a top-level numeric "weight" field to the auth JSON.

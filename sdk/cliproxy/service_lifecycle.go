@@ -103,6 +103,9 @@ func (s *Service) Run(ctx context.Context) error {
 		s.coreManager.StartAutoRefresh(ctx, interval)
 		log.Infof("core auth auto-refresh started (interval=%s)", interval)
 	}
+	if s.coreManager != nil {
+		go s.coreManager.RunCodexQuotaRefresh(ctx)
+	}
 
 	if !homeEnabled {
 		tokenResult, err := s.tokenProvider.Load(ctx, cfg)
