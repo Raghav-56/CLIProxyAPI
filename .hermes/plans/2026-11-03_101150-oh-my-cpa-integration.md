@@ -2,7 +2,7 @@
 
 ## Goal and status
 
-Add persistent proxy diagnostics and, after verification, agent access from T3 Code while preserving the existing custom CLIProxyAPI account console and Windows Rainmeter widget. The user subsequently authorized implementation. The isolated local sidecar is installed; collection and tailnet exposure remain disabled after automatic approval review required specific authorization. `deploy/oh-my-cpa/VALIDATION.md` records actual deployment evidence and remaining gates; proposed steps below are not claims of completed acceptance.
+Add persistent proxy diagnostics and, after verification, agent access from T3 Code while preserving the existing custom CLIProxyAPI account console and Windows Rainmeter widget. The user authorized implementation and subsequently explicitly approved sole subscription collection/residual queue reads and private Tailscale HTTPS access on port 8444. The sidecar is installed and collecting, history survives restart, and the private dashboard works. MCP remains deferred. `deploy/oh-my-cpa/VALIDATION.md` records execution evidence and limits; proposed steps below should be read alongside that completed deployment record.
 
 Use the current host's native orchestration. Important planning and verification use CP `gpt-6.1-sol` with `reasoningEffort=high`; separately delegated implementation uses CP `gpt-6.1-terra`. The user clarified that exploration should use CP `gpt-6-luna`, which is available. Implementation was authorized after this plan's review; see `deploy/oh-my-cpa/VALIDATION.md` for execution evidence and remaining limits.
 

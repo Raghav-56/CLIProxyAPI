@@ -1,6 +1,8 @@
 # Oh-My-CPA sidecar
 
-These files support a native Linux ARM64 user service independent of the proxy service. The templates do not install themselves. Pin the v0.3.20 ARM64 archive with SHA256 `305c013f65a9e002c343bcfddbf9f170a249857ba17fd4012d8e346c02256dd0`; its source revision is `d16465b34f6ebb38a4cb4b1fbdc144da25f37cd2`. Verify the downloaded archive before extracting it. The verified executable SHA256 is `b7251c817e8f140af9a661ec6871b7fa6ccaad44ac34a618c01ea93dde3cac71`. See [VALIDATION.md](VALIDATION.md) for the actual installed state and remaining approval gates.
+These files support a native Linux ARM64 user service independent of the proxy service. The templates do not install themselves. Pin the v0.3.20 ARM64 archive with SHA256 `305c013f65a9e002c343bcfddbf9f170a249857ba17fd4012d8e346c02256dd0`; its source revision is `d16465b34f6ebb38a4cb4b1fbdc144da25f37cd2`. Verify the downloaded archive before extracting it. The verified executable SHA256 is `b7251c817e8f140af9a661ec6871b7fa6ccaad44ac34a618c01ea93dde3cac71`. See [VALIDATION.md](VALIDATION.md) for the deployment evidence and limitations.
+
+On Oracler, the approved deployment is active at [the private dashboard](https://oracler.tail0f2859.ts.net:8444/). Sign in with the existing CLIProxyAPI management key. Subscription collection and user-service startup are enabled; quota automation, plugin-source management, updater/checks and T3 MCP remain disabled. Continue using `/accounts.html` on the existing proxy for custom account selection. Browser management actions retain administrative privileges; the dashboard is not a technically read-only client. History begins when collection is enabled, with only the proxy's short residual queue available for backfill.
 
 Install the executable under `~/.local/share/oh-my-cpa/releases/<version>/` and point `~/.local/share/oh-my-cpa/current` to that release. Create the app and data directories with mode 0700. Copy the service to `~/.config/systemd/user/` and the environment example to `~/.config/oh-my-cpa/service.env` with mode 0600. Replace `REPLACE_USER` with the actual absolute home path: systemd environment files do not expand `%h` or shell variables. Privately provision the existing CPA management key and a separate persistent `OMCPA_MASTER_KEY` using the release's supported configuration; never put secrets in the repository or command arguments. Preserve and back up the master key separately from the database. The unit uses no Docker, socket updater, CPA dependency, or automatic restart.
 
@@ -26,6 +28,8 @@ systemctl --user stop oh-my-cpa.service
 ```
 
 Stop only the sidecar on an unexpected authentication rejection, proxy mutation, quota/cooldown action, or collector interference. Stop does not undo an applied change or recover lost events. Do not restore old proxy credentials/configuration or restart CPA/T3/Rainmeter as an incidental recovery action.
+
+To withdraw only the new private dashboard listener, use `tailscale serve --https=8444 off`. Do not reset the full Serve configuration, which also contains unrelated services and the account console.
 
 ## Read-only baseline
 
