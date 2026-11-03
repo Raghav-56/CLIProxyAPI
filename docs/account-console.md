@@ -123,6 +123,9 @@ Disconnect clears it. The standard `/management.html` interface remains availabl
 For T3 Code provider setup and the distinction between native limits, hub quotas, and actual
 routing, see [T3 Code integration](t3-code-integration.md).
 
+For a Windows desktop display alongside this console, see
+[the Rainmeter companion](rainmeter.md).
+
 ## Connect another computer
 
 Use an authenticated private connection, such as an SSH localhost forward or Tailscale Serve.

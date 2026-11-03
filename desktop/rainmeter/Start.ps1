@@ -1,0 +1,2 @@
+$root=Join-Path $env:LOCALAPPDATA 'CLIProxyAccounts'
+Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList @('-NoProfile','-NonInteractive','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File', ('"'+(Join-Path $root 'Helper.ps1')+'"')) -WindowStyle Hidden
