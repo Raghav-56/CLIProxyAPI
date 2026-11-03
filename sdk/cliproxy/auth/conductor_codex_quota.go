@@ -13,6 +13,7 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/auth/codex"
 	internalconfig "github.com/router-for-me/CLIProxyAPI/v8/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/registry"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -141,23 +142,68 @@ func codexQuotaAccountID(auth *Auth) string {
 	return ""
 }
 
+// ObserveCodexQuotaUsage publishes a successful usage lookup for an OAuth snapshot.
+func (m *Manager) ObserveCodexQuotaUsage(snapshot *Auth, startedAt time.Time, body []byte) {
+	headers, errParse := parseCodexUsageHeaders(body)
+	if errParse != nil || m == nil || snapshot == nil {
+		return
+	}
+	m.applyCodexQuotaObservation(snapshot, startedAt, headers, false)
+}
+
 func (m *Manager) applyCodexQuotaProbe(snapshot *Auth, startedAt time.Time, headers http.Header) {
+	m.applyCodexQuotaObservation(snapshot, startedAt, headers, true)
+}
+
+func (m *Manager) applyCodexQuotaObservation(snapshot *Auth, startedAt time.Time, headers http.Header, automatic bool) {
+	releaseMutation := m.lockAuthMutation(snapshot.ID)
+	defer releaseMutation()
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	current := m.auths[snapshot.ID]
-	if !m.automaticCodexQuotaEnabled() || !codexQuotaProbeEligible(current) ||
+	if m.HomeEnabled() || (automatic && !m.automaticCodexQuotaEnabled()) || !codexQuotaProbeEligible(current) ||
 		current.RegistrationEpoch != snapshot.RegistrationEpoch || current.CredentialVersion != snapshot.CredentialVersion ||
 		secretGrantChanged(current, snapshot) || current.Quota.ObservedAt.After(startedAt) {
+		m.mu.Unlock()
 		return
 	}
 	if len(headers) == 0 {
 		if current.Quota.ClearObservationSignals() {
 			current.Generation++
 		}
+		m.mu.Unlock()
 		return
 	}
+	// A lookup that started before the last failure cannot release its cooldown.
+	canRecover := current.Quota.Exceeded && current.Quota.Reason == "credential_quota" &&
+		!startedAt.Before(current.UpdatedAt) && !hasUnauthorizedAuthFailure(current)
 	if current.Quota.ObserveResponseHeadersForProvider("codex", headers, startedAt) {
 		current.Generation++
+	}
+	now := time.Now()
+	_, quotaState := codexQuotaRankAt(current, now)
+	if !canRecover || quotaState != codexQuotaUsable ||
+		headers.Get("X-Codex-Allowed") != "true" || headers.Get("X-Codex-Limit-Reached") != "false" {
+		m.mu.Unlock()
+		return
+	}
+	restoreCredentialQuota(current, now)
+	current.Generation++
+	current.UpdatedAt = now
+	recovered := current.Clone()
+	m.mu.Unlock()
+	releaseMutation()
+
+	m.persistCooldownStates(context.Background())
+	models, epoch := registry.GetGlobalRegistry().GetModelsAndEpochForClient(recovered.ID)
+	projections := make([]registry.ClientModelProjection, 0, len(models))
+	for _, model := range models {
+		if model != nil && strings.TrimSpace(model.ID) != "" {
+			projections = append(projections, m.clientModelProjectionForAuth(recovered, model.ID, now))
+		}
+	}
+	registry.GetGlobalRegistry().ApplyClientModelProjections(recovered.ID, epoch, recovered.Generation, projections)
+	if m.scheduler != nil {
+		m.scheduler.upsertAuth(recovered)
 	}
 }
 

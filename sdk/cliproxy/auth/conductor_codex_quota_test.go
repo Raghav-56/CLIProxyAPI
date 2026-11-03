@@ -13,6 +13,7 @@ import (
 	"time"
 
 	internalconfig "github.com/router-for-me/CLIProxyAPI/v8/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/registry"
 )
 
 type codexQuotaProbeExecutor struct {
@@ -249,5 +250,80 @@ func TestParseCodexUsageHeadersPreservesMalformedWindows(t *testing.T) {
 		if _, state := codexQuotaRankAt(auth, now); state != tc.want {
 			t.Fatalf("body %s produced state %v, want %v", tc.body, state, tc.want)
 		}
+	}
+}
+
+func TestCodexQuotaResetRecovery(t *testing.T) {
+	for _, scenario := range []string{"manual", "automatic", "newer failure", "unauthorized", "depleted", "malformed", "Home", "independent model cooldown"} {
+		t.Run(scenario, func(t *testing.T) {
+			manager, auth := codexQuotaProbeManager(t)
+			reg := registry.GetGlobalRegistry()
+			reg.RegisterClient(auth.ID, "codex", []*registry.ModelInfo{{ID: "reporter"}, {ID: "sibling"}})
+			t.Cleanup(func() { reg.UnregisterClient(auth.ID) })
+			store := &recordingCooldownStateStore{}
+			manager.cooldownStore = store
+			retry := time.Hour
+			if scenario == "independent model cooldown" {
+				manager.MarkResult(context.Background(), Result{AuthID: auth.ID, Provider: "codex", Model: "sibling", Error: &Error{HTTPStatus: 500, Message: "server error"}})
+			}
+			manager.MarkResult(context.Background(), Result{AuthID: auth.ID, Provider: "codex", Model: "reporter", CredentialScope: true, RetryAfter: &retry, Error: &Error{HTTPStatus: 429, Message: "usage_limit_reached"}})
+			auth, _ = manager.GetByID(auth.ID)
+			startedAt := time.Now()
+			if scenario == "newer failure" {
+				startedAt = auth.UpdatedAt.Add(-time.Second)
+			}
+			if scenario == "unauthorized" {
+				manager.MarkResult(context.Background(), Result{AuthID: auth.ID, Provider: "codex", Model: "reporter", Error: &Error{HTTPStatus: 401, Message: "unauthorized"}})
+			}
+			body := codexQuotaProbeBody()
+			if scenario == "depleted" {
+				body = strings.Replace(body, `"used_percent":34`, `"used_percent":100`, 1)
+			}
+			if scenario == "malformed" {
+				body = `{}`
+			}
+			if scenario == "automatic" {
+				headers, errParse := parseCodexUsageHeaders([]byte(body))
+				if errParse != nil {
+					t.Fatal(errParse)
+				}
+				manager.applyCodexQuotaProbe(auth, startedAt, headers)
+			} else {
+				cfg := &internalconfig.Config{Routing: internalconfig.RoutingConfig{CodexOAuthAuthID: auth.ID}}
+				cfg.Home.Enabled = scenario == "Home"
+				manager.SetConfig(cfg)
+				manager.ObserveCodexQuotaUsage(auth, startedAt, []byte(body))
+			}
+			actual, _ := manager.GetByID(auth.ID)
+			if scenario == "Home" {
+				if actual.Quota.Signals["X-Codex-Primary-Used-Percent"] != "20" {
+					t.Fatal("local quota lookup changed Home-managed observation")
+				}
+				return
+			}
+			wantBlocked := scenario == "newer failure" || scenario == "unauthorized" || scenario == "depleted" || scenario == "malformed"
+			blocked, _, _ := isAuthBlockedForModel(actual, "reporter", time.Now())
+			if blocked != wantBlocked {
+				t.Fatalf("reporter blocked = %v, want %v; auth=%+v", blocked, wantBlocked, actual)
+			}
+			if wantBlocked {
+				return
+			}
+			if actual.Quota.Exceeded || !actual.Quota.NextRecoverAt.IsZero() {
+				t.Fatalf("credential cooldown survived: %+v", actual.Quota)
+			}
+			if reg.GetModelCount("reporter") != 1 {
+				t.Fatal("registry did not resume reporter")
+			}
+			if scenario == "independent model cooldown" {
+				if blocked, _, _ := isAuthBlockedForModel(actual, "sibling", time.Now()); !blocked {
+					t.Fatal("independent cooldown was cleared")
+				}
+			} else {
+				if actual.Unavailable || actual.Status != StatusActive || len(store.savedRecords()) != 0 {
+					t.Fatalf("recovered state still blocked or persisted: %+v, records=%v", actual, store.savedRecords())
+				}
+			}
+		})
 	}
 }

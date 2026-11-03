@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1488,5 +1489,71 @@ func TestAPICallRejectsWhenOnlyIDTokenPresentWithoutRefreshToken(t *testing.T) {
 	}
 	if upstreamHit.Load() {
 		t.Fatal("upstream must not be hit when access token cannot be resolved")
+	}
+}
+
+func TestAPICallV8RecoversResetCodexQuota(t *testing.T) {
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer test-oauth-token" {
+			t.Error("missing account token")
+		}
+		fmt.Fprintf(w, `{"rate_limit":{"allowed":true,"limit_reached":false,"primary_window":{"used_percent":2,"limit_window_seconds":18000,"reset_after_seconds":3600},"secondary_window":{"used_percent":0,"limit_window_seconds":604800,"reset_after_seconds":604800}}}`)
+	}))
+	defer upstream.Close()
+	transport := upstream.Client().Transport.(*http.Transport).Clone()
+	transport.TLSClientConfig.ServerName = "example.com"
+	transport.DialContext = func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, upstream.Listener.Addr().String())
+	}
+	originalTransport := http.DefaultTransport
+	http.DefaultTransport = transport
+	defer func() { http.DefaultTransport = originalTransport; transport.CloseIdleConnections() }()
+	for _, scenario := range []string{"v8 quota", "legacy quota", "other endpoint"} {
+		t.Run(scenario, func(t *testing.T) {
+			manager := coreauth.NewManager(nil, nil, nil)
+			auth, errRegister := manager.Register(context.Background(), &coreauth.Auth{
+				ID: "reset-codex", FileName: "reset-codex.json", Provider: "codex", Status: coreauth.StatusActive,
+				Metadata: map[string]any{"access_token": "test-oauth-token", "type": "codex"},
+			})
+			if errRegister != nil {
+				t.Fatal(errRegister)
+			}
+			retry := time.Hour
+			manager.MarkResult(context.Background(), coreauth.Result{AuthID: auth.ID, Provider: "codex", Model: "gpt-test", CredentialScope: true, RetryAfter: &retry, Error: &coreauth.Error{HTTPStatus: 429, Message: "usage_limit_reached"}})
+			auth.EnsureIndex()
+			handler := &Handler{authManager: manager}
+			router := gin.New()
+			router.POST("/", func(c *gin.Context) {
+				c.Set(ConfigV8ContextKey, scenario != "legacy quota")
+				handler.APICall(c)
+			})
+			target := "https://chatgpt.com/backend-api/wham/usage"
+			if scenario == "other endpoint" {
+				target = "https://chatgpt.com/other"
+			}
+			payload, errMarshal := json.Marshal(map[string]any{"auth_index": auth.Index, "method": "GET", "url": target, "header": map[string]string{"Authorization": "Bearer $TOKEN$"}})
+			if errMarshal != nil {
+				t.Fatal(errMarshal)
+			}
+			request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(string(payload)))
+			request.Header.Set("Content-Type", "application/json")
+			recorder := httptest.NewRecorder()
+			router.ServeHTTP(recorder, request)
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("response = %d %s", recorder.Code, recorder.Body.String())
+			}
+			var response apiCallResponse
+			if errDecode := json.Unmarshal(recorder.Body.Bytes(), &response); errDecode != nil {
+				t.Fatal(errDecode)
+			}
+			if response.StatusCode != http.StatusOK {
+				t.Fatalf("upstream status = %d", response.StatusCode)
+			}
+			actual, _ := manager.GetByID(auth.ID)
+			wantBlocked := scenario != "v8 quota"
+			if actual.Quota.Exceeded != wantBlocked || actual.Unavailable != wantBlocked {
+				t.Fatalf("quota exceeded=%v, unavailable=%v, want blocked=%v", actual.Quota.Exceeded, actual.Unavailable, wantBlocked)
+			}
+		})
 	}
 }

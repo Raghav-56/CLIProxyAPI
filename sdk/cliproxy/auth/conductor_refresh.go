@@ -985,6 +985,11 @@ func applyDevinQuotaRestoration(auth, existing *Auth, now time.Time) bool {
 		return false
 	}
 
+	restoreCredentialQuota(auth, now)
+	return true
+}
+
+func restoreCredentialQuota(auth *Auth, now time.Time) {
 	applyCooldownFields(&auth.Quota, QuotaState{})
 	for _, state := range auth.ModelStates {
 		if state == nil {
@@ -1015,7 +1020,6 @@ func applyDevinQuotaRestoration(auth, existing *Auth, now time.Time) bool {
 	if len(auth.ModelStates) > 0 {
 		updateAggregatedAvailability(auth, now)
 	}
-	return true
 }
 
 // isDevinQuotaExhaustionMessage reports whether text is Devin's explicit

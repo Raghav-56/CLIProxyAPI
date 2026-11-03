@@ -16,6 +16,10 @@ go build -o test-output ./cmd/server && rm test-output # Verify compile (REQUIRE
 ```
 - Common flags: `--config <path>`, `--tui`, `--standalone`, `--local-model`, `--no-browser`, `--oauth-callback-port <port>`
 
+## Completing work
+- Commit completed task changes after the required checks pass and before reporting completion.
+- Include only changes for the current task in the commit.
+
 ## Config
 - Default config: `config.yaml` (template: `config.example.yaml`)
 - `.env` is auto-loaded from the working directory

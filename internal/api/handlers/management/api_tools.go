@@ -215,6 +215,7 @@ func (h *Handler) APICall(c *gin.Context) {
 	}
 	httpClient.Transport = h.apiCallTransport(auth, requestProxyURL)
 
+	startedAt := time.Now()
 	resp, errDo := httpClient.Do(req)
 	if errDo != nil {
 		log.WithError(errDo).Debug("management APICall request failed")
@@ -231,6 +232,13 @@ func (h *Handler) APICall(c *gin.Context) {
 	if errReadAll != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to read response"})
 		return
+	}
+
+	if c.GetBool(ConfigV8ContextKey) && h.authManager != nil && auth != nil &&
+		method == http.MethodGet && urlStr == "https://chatgpt.com/backend-api/wham/usage" &&
+		hostOverride == "" && tokenResolved && token != "" && req.Header.Get("Authorization") == "Bearer "+token &&
+		resp.StatusCode == http.StatusOK && resp.Request != nil && resp.Request.URL.String() == urlStr {
+		h.authManager.ObserveCodexQuotaUsage(auth, startedAt, respBody)
 	}
 
 	c.JSON(http.StatusOK, apiCallResponse{

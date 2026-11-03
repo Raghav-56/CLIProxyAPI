@@ -497,6 +497,11 @@
       try { payload = JSON.parse(result.body); } catch (_) { throw new Error('The provider returned an invalid quota response.'); }
       const quota = parseQuota(payload, Date.now());
       if (managementKey && accounts.some(current => current.id === account.id)) quotas.set(account.id, quota);
+      if (account.unavailable) {
+        const list = await api('/credentials');
+        const updated = codexAccounts(list?.files).find(current => current.id === account.id);
+        if (managementKey && updated) accounts = accounts.map(current => current.id === account.id ? updated : current);
+      }
     } catch (error) {
       if (managementKey) {
         quotas.delete(account.id);
