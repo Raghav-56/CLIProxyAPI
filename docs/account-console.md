@@ -120,6 +120,9 @@ upstream transport is reported from the actual executor when known.
 The management key stays in browser memory unless you choose to keep it for that tab.
 Disconnect clears it. The standard `/management.html` interface remains available for full configuration.
 
+For T3 Code provider setup and the distinction between native limits, hub quotas, and actual
+routing, see [T3 Code integration](t3-code-integration.md).
+
 ## Connect another computer
 
 Use an authenticated private connection, such as an SSH localhost forward or Tailscale Serve.
