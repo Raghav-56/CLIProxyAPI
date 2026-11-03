@@ -19,6 +19,7 @@ if (!$skinRoot -or !(Test-Path -LiteralPath $skinRoot)) { throw 'Rainmeter SkinP
 $skin=Join-Path $skinRoot 'CLIProxyAccounts'
 if ((Test-Path -LiteralPath $skin) -and !(Test-Path -LiteralPath (Join-Path $skin '.cliproxy-widget'))) { throw 'Refusing to overwrite an unrelated skin' }
 Protect-WidgetDirectory $root
+& (Join-Path $PSScriptRoot 'StartHotkeys.ps1') -Install -Root $root
 if (Test-Path -LiteralPath (Join-Path $root 'Helper.ps1')) {
     [IO.File]::WriteAllText((Join-Path $root 'stop'),'stop')
     $mutex=New-Object Threading.Mutex($false, ('Local\CLIProxyAccounts-'+[Security.Principal.WindowsIdentity]::GetCurrent().User.Value))
@@ -39,7 +40,7 @@ else {
     $existing=Get-WidgetKey $root
     try { Save-WidgetKey (ConvertTo-SecureString $existing -AsPlainText -Force) $root } finally { $existing=$null }
 }
-foreach ($name in @('Core.ps1','Helper.ps1','Start.ps1','Stop.ps1','OpenConsole.ps1','Uninstall.ps1')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $root -Force }
+foreach ($name in @('Core.ps1','Helper.ps1','Start.ps1','StartHotkeys.ps1','Hotkeys.cs','Stop.ps1','OpenConsole.ps1','Uninstall.ps1')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $root -Force }
 @{ BaseUrl=$base; RainmeterDirectory=$RainmeterDirectory; SkinDirectory=$skin } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $root 'settings.json') -Encoding UTF8
 [void][IO.Directory]::CreateDirectory($skin)
 Copy-Item -Path (Join-Path $PSScriptRoot 'CLIProxyAccounts\*') -Destination $skin -Recurse -Force

@@ -67,7 +67,10 @@ function Get-SafeDisplay($Value) {
 }
 function Get-QuotaView($Quota, [DateTimeOffset]$Now) {
     $observed = Get-Time (Get-Field $Quota 'observed_at')
-    $result = @{ State='unknown'; Primary='Primary unknown'; Secondary='Secondary unknown'; Age='unknown'; ValidUntil=0 }
+    $result = @{
+        State='unknown'; Primary='Primary unknown'; Secondary='Secondary unknown'; Age='unknown'; ValidUntil=0
+        PrimaryDuration=''; PrimaryRemaining=''; PrimaryReset=''; SecondaryDuration=''; SecondaryRemaining=''; SecondaryReset=''
+    }
     if (!$observed) { return $result }
     $age = ($Now - $observed).TotalSeconds
     $result.Age = [string][Math]::Max(0,[Math]::Floor($age)) + 's'
@@ -94,10 +97,10 @@ function Get-QuotaView($Quota, [DateTimeOffset]$Now) {
         try {
             if ($map.ContainsKey($prefix+'Reset-At')) {
                 $seconds = Get-Number $map[($prefix+'Reset-At')]
-                if ($null -ne $seconds -and $seconds -gt 0) { $reset = [DateTimeOffset]::FromUnixTimeSeconds([long]$seconds) }
+                if ($null -ne $seconds -and $seconds -gt 0 -and $seconds -eq [Math]::Floor($seconds)) { $reset = [DateTimeOffset]::FromUnixTimeSeconds([long]$seconds) }
             } else {
                 $seconds = Get-Number $map[($prefix+'Reset-After-Seconds')]
-                if ($null -ne $seconds -and $seconds -ge 0) { $reset = $observed.AddSeconds($seconds) }
+                if ($null -ne $seconds -and $seconds -ge 0 -and $seconds -eq [Math]::Floor($seconds)) { $reset = $observed.AddSeconds($seconds) }
             }
         } catch { $reset=$null }
         if ($null -eq $used -or $used -lt 0 -or $used -gt 100 -or !$minutes -or $minutes -le 0 -or $minutes -ne [Math]::Floor($minutes) -or !$reset) { $malformed=$true; continue }
@@ -106,6 +109,9 @@ function Get-QuotaView($Quota, [DateTimeOffset]$Now) {
         elseif ($minutes % 60 -eq 0) { $label = [string]($minutes/60)+'h' }
         if ($reset -le $Now) { $crossed=$true; $result[$name]="$label reset crossed"; continue }
         $result.ValidUntil=[Math]::Min($result.ValidUntil,$reset.ToUnixTimeSeconds())
+        $result[$name+'Duration']=$minutes
+        $result[$name+'Remaining']=100-$used
+        $result[$name+'Reset']=$reset.ToUnixTimeSeconds()
         $left = [Math]::Round(100-$used,1).ToString([Globalization.CultureInfo]::InvariantCulture)
         $result[$name] = "$label : $left pct left / reset " + [Math]::Ceiling(($reset-$Now).TotalMinutes) + 'm'
         $valid++
@@ -114,6 +120,11 @@ function Get-QuotaView($Quota, [DateTimeOffset]$Now) {
     if ($crossed) { $result.State='reset-crossed' }
     elseif ($depleted) { $result.State='exhausted' }
     elseif (!$malformed -and $valid -gt 0) { $result.State='available' }
+    if ($result.State -notin @('available','exhausted')) {
+        foreach ($name in @('Primary','Secondary')) {
+            foreach ($field in @('Duration','Remaining','Reset')) { $result[$name+$field]='' }
+        }
+    }
     return $result
 }
 function New-WidgetSnapshot($Credentials, $Route, $Recent, [DateTimeOffset]$Now) {
@@ -125,12 +136,22 @@ function New-WidgetSnapshot($Credentials, $Route, $Recent, [DateTimeOffset]$Now)
         (Get-Field $_ 'name') -is [string] -and ![string]::IsNullOrWhiteSpace($_.name) -and
         (Get-Field $_ 'auth_index') -is [string] -and ![string]::IsNullOrWhiteSpace($_.auth_index)
     })
-    $data = [ordered]@{ Connection='Connected'; Route=''; Selected='No manual account'; Primary='Primary unknown'; Secondary='Secondary unknown'; Observation='unknown'; Pool=''; PoolList=''; Attempt='No recent attempts'; Model='unknown'; Transport='unknown'; Timing='unknown'; Tokens='Tokens unknown'; AttemptAge='unknown'; QuotaUntil=$Now.AddSeconds(300).ToUnixTimeSeconds() }
+    $data = [ordered]@{
+        Connection='Connected'; Route=''; Selected='No manual account'; Primary='Primary unknown'; Secondary='Secondary unknown'; Observation='unknown'
+        Pool=''; PoolList=''; Attempt='No recent attempts'; Model='unknown'; Transport='unknown'; Timing='unknown'; Tokens='Tokens unknown'; AttemptAge='unknown'
+        QuotaUntil=$Now.AddSeconds(300).ToUnixTimeSeconds(); SelectedPlan='unknown'; SelectedID=''; SelectedState='unknown'; SelectedQuotaState='unknown'; SelectedUntil=0
+        PrimaryDuration=''; PrimaryRemaining=''; PrimaryReset=''; SecondaryDuration=''; SecondaryRemaining=''; SecondaryReset=''
+        PoolAvailable=0; PoolBlocked=0; PoolUnknown=0; PoolUntil=0; RoutingMode='automatic'; RoutingApplied='0'
+    }
     $mode = [string]$Route.mode
     if ($mode -ne 'manual') { $mode = 'automatic'; if ($Route.strategy -eq 'soonest-reset') { $mode='automatic soonest-reset' } }
     $applied = 'unconfirmed'; if ((Get-Field $Route 'applied') -eq $true) { $applied='applied' }
     $data.Route = "$mode / $applied"
-    if ((Get-Field $Route 'home_enabled') -eq $true) { $data.Route='Home managed / '+$applied }
+    $data.RoutingMode='automatic'
+    if ($Route.mode -eq 'manual') { $data.RoutingMode='manual' }
+    elseif ($Route.strategy -eq 'soonest-reset') { $data.RoutingMode='soonest-reset' }
+    if ((Get-Field $Route 'applied') -eq $true) { $data.RoutingApplied='1' }
+    if ((Get-Field $Route 'home_enabled') -eq $true) { $data.Route='Home managed / '+$applied; $data.RoutingMode='home' }
     $available=0; $unknown=0; $blocked=0; $list=@()
     foreach ($row in $rows) {
         $q = Get-QuotaView (Get-Field $row 'quota') $Now
@@ -146,10 +167,20 @@ function New-WidgetSnapshot($Credentials, $Route, $Recent, [DateTimeOffset]$Now)
             if (!$plan) { $plan=Get-Field (Get-Field (Get-Field $row 'quota') 'signals') 'X-Codex-Plan-Type' }
             if ($plan -notin @('free','go','plus','pro','team','business','enterprise','edu')) { $plan='plan unknown' }
             $data.Selected="$id / $plan / $state"; $data.Primary=$q.Primary; $data.Secondary=$q.Secondary; $data.Observation=$q.Age
+            if ($plan -ne 'plan unknown') { $data.SelectedPlan=$plan }
+            $data.SelectedID=$id; $data.SelectedState=$state; $data.SelectedQuotaState=$q.State; $data.SelectedUntil=$q.ValidUntil
+            foreach ($name in @('Primary','Secondary')) {
+                foreach ($field in @('Duration','Remaining','Reset')) {
+                    $value=$q[$name+$field]
+                    if ($value -is [double]) { $value=$value.ToString([Globalization.CultureInfo]::InvariantCulture) }
+                    $data[$name+$field]=$value
+                }
+            }
         }
     }
     if ($Route.mode -eq 'manual' -and $data.Selected -eq 'No manual account') { $data.Selected='Selected account missing' }
     $data.Pool="$available known available / $blocked blocked / $unknown unknown"
+    $data.PoolAvailable=$available; $data.PoolBlocked=$blocked; $data.PoolUnknown=$unknown; $data.PoolUntil=$data.QuotaUntil
     $data.PoolList=($list | Select-Object -First 6) -join ', '
     if ($rows.Count -gt 6) { $data.PoolList += ', more in console' }
     $attempt = @($Recent.requests | Sort-Object { Get-Time (Get-Field $_ 'requested_at') } -Descending | Select-Object -First 1)
@@ -185,7 +216,11 @@ function New-WidgetSnapshot($Credentials, $Route, $Recent, [DateTimeOffset]$Now)
 }
 function Write-WidgetSnapshot($Data, [string]$Path, [DateTimeOffset]$Now, $ConnectedAt) {
     $lines=@('[Snapshot]', ('Written='+$Now.ToUnixTimeSeconds()), ('ConnectedAt='+$ConnectedAt), ('QuotaUntil='+(Get-SafeDisplay $Data['QuotaUntil'])))
-    foreach ($name in @('Connection','Route','Selected','Primary','Secondary','Observation','Pool','PoolList','Attempt','Model','Transport','Timing','Tokens','AttemptAge')) { $lines += $name+'='+(Get-SafeDisplay $Data[$name]) }
+    foreach ($name in @(
+        'Connection','Route','Selected','Primary','Secondary','Observation','Pool','PoolList','Attempt','Model','Transport','Timing','Tokens','AttemptAge',
+        'SelectedPlan','SelectedID','SelectedState','SelectedQuotaState','SelectedUntil','PrimaryDuration','PrimaryRemaining','PrimaryReset',
+        'SecondaryDuration','SecondaryRemaining','SecondaryReset','PoolAvailable','PoolBlocked','PoolUnknown','PoolUntil','RoutingMode','RoutingApplied'
+    )) { $lines += $name+'='+(Get-SafeDisplay $Data[$name]) }
     $temp=$Path+'.'+[Guid]::NewGuid().ToString('N')+'.tmp'
     try {
         [IO.File]::WriteAllLines($temp, $lines, [Text.Encoding]::ASCII)

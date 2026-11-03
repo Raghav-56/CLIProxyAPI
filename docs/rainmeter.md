@@ -10,6 +10,15 @@ Rainmeter. Keep the helper and its protected settings on that computer.
 
 ## Read the widget
 
+Press **Ctrl+Alt+Q** to hide or restore the widget. MementoMori keeps its separate
+**Ctrl+Alt+M** shortcut. **Hide** does the same without unloading the skin.
+**Details** expands account identities and request diagnostics. Hiding preserves
+the current compact or expanded view.
+
+The compact view shows two quota windows side by side, remaining percentages,
+bars, reset countdowns, and pool status. Window labels come from their actual
+durations. Unknown or stale values show dashes rather than empty quota.
+
 The saved account selection and the last observed execution describe different
 things. Manual selection identifies the configured account. In automatic mode,
 session affinity can retain an account for an existing conversation. The latest

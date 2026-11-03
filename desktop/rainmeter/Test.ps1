@@ -29,21 +29,29 @@ function FixtureQuota {
 }
 $q=FixtureQuota; $view=Get-QuotaView $q $now
 Assert ($view.State -eq 'available' -and $view.Primary -eq '5h : 75 pct left / reset 9m' -and $view.Secondary -like '30d : 90*') 'Observed durations and observation-relative reset'
+Assert ($view.PrimaryDuration -eq 300 -and $view.PrimaryRemaining -eq 75 -and $view.PrimaryReset -eq 1793707740) 'Structured primary window uses absolute observation-relative reset'
+Assert ($view.SecondaryDuration -eq 43200 -and $view.SecondaryRemaining -eq 90 -and $view.SecondaryReset -eq 1795435200) 'Structured 30-day window keeps actual duration and absolute reset'
 $q.observed_at=$now.AddSeconds(-301).ToString('o')
 Assert ((Get-QuotaView $q $now).State -eq 'stale') 'Older than five minutes stale'
+Assert ((Get-QuotaView $q $now).PrimaryRemaining -eq '' -and (Get-QuotaView $q $now).SecondaryReset -eq '') 'Stale observations export no bar values'
 $q.observed_at=$now.AddSeconds(1).ToString('o')
 Assert ((Get-QuotaView $q $now).State -eq 'stale') 'Future observation rejected'
 $q=FixtureQuota; $q.signals.'X-Codex-Primary-Reset-After-Seconds'='1'
 Assert ((Get-QuotaView $q $now).State -eq 'reset-crossed') 'Reset crossed invalidates availability'
+Assert ((Get-QuotaView $q $now).PrimaryReset -eq '' -and (Get-QuotaView $q $now).SecondaryRemaining -eq '') 'Crossed reset clears both structured windows'
 $q=FixtureQuota; $q.signals.'X-Codex-Primary-Used-Percent'='100'
 Assert ((Get-QuotaView $q $now).State -eq 'exhausted') 'Exhaustion observed'
+Assert ((Get-QuotaView $q $now).PrimaryRemaining -eq 0) 'Exhausted window retains observed zero remaining'
 $q=FixtureQuota; $q.signals.'X-Codex-Primary-Used-Percent'='NaN'
 Assert ((Get-QuotaView $q $now).State -eq 'unknown') 'Invalid numeric schema unknown'
+Assert ((Get-QuotaView $q $now).PrimaryRemaining -eq '' -and (Get-QuotaView $q $now).SecondaryRemaining -eq '') 'Malformed quota cannot produce a valid-looking bar'
 Assert ((Get-QuotaView $null $now).State -eq 'unknown') 'Missing quota unknown'
 $q=FixtureQuota; $q.observed_at=$now.AddSeconds(-300).ToString('o')
 Assert ((Get-QuotaView $q $now).State -eq 'available') 'Five-minute boundary matches server policy'
 $q=FixtureQuota; $q.signals | Add-Member -NotePropertyName 'X-Codex-Primary-Reset-At' -NotePropertyValue 'invalid'
 Assert ((Get-QuotaView $q $now).State -eq 'unknown') 'Malformed reset-at does not fall back to reset-after'
+$q=FixtureQuota; $q.signals.'X-Codex-Primary-Reset-After-Seconds'='600.5'
+Assert ((Get-QuotaView $q $now).PrimaryReset -eq '' -and (Get-QuotaView $q $now).State -eq 'unknown') 'Fractional reset seconds are not rounded into a bar deadline'
 $q=FixtureQuota; $q.signals | Add-Member -NotePropertyName 'X-Codex-Allowed' -NotePropertyValue 'false'
 Assert ((Get-QuotaView $q $now).State -eq 'exhausted') 'Allowed false blocks quota'
 $q=FixtureQuota; $q.signals | Add-Member -NotePropertyName 'X-Codex-Limit-Reached' -NotePropertyValue 'maybe'
@@ -56,6 +64,9 @@ $route=[pscustomobject]@{mode='manual';auth_id='private@example.com.json';applie
 $recent=[pscustomobject]@{requests=@([pscustomobject]@{auth_id='private@example.com.json';model='gpt-5.1';success=$false;downstream_transport='sse';upstream_transport='websocket';latency_ms=1234.5;ttft_ms=$null;requested_at=$now.AddSeconds(-5).ToString('o')})}
 $data=New-WidgetSnapshot $credentials $route $recent $now
 Assert ($data.Selected -match '^acct-[0-9a-f]{8} / plus / available$' -and $data.Route -eq 'manual / applied') 'Manual selected and plan separate from pool'
+Assert ($data.SelectedID -match '^acct-[0-9a-f]{8}$' -and $data.SelectedPlan -eq 'plus' -and $data.SelectedState -eq 'available' -and $data.SelectedQuotaState -eq 'available') 'Structured selection is masked and has a recognized plan and state'
+Assert ($data.PrimaryRemaining -eq 75 -and $data.PrimaryDuration -eq 300 -and $data.PrimaryReset -eq 1793707740 -and $data.SelectedUntil -eq 1793707440) 'Selected bar values carry original reset and freshness deadline'
+Assert ($data.RoutingMode -eq 'manual' -and $data.RoutingApplied -eq '1' -and $data.PoolAvailable -eq 1 -and $data.PoolBlocked -eq 0 -and $data.PoolUnknown -eq 0 -and $data.PoolUntil -eq 1793707440) 'Structured routing and pool describe separate server observations'
 Assert ($data.Transport -eq 'sse to websocket' -and $data.Timing -eq 'Elapsed 1234ms / TTFT unknown' -and $data.Attempt -like '*failed') 'Actual attempt transports timing and unknown TTFT'
 Assert ($data.Tokens -eq 'Tokens unknown') 'Missing usage remains unknown'
 $recent.requests[0] | Add-Member -NotePropertyName 'usage_known' -NotePropertyValue $true
@@ -78,9 +89,16 @@ foreach ($kind in @('api_key','runtime','missing-kind','missing-runtime','missin
 }
 $pool=New-WidgetSnapshot ([pscustomobject]@{files=$mixed}) $route $recent $now
 Assert ($pool.Pool -eq '1 known available / 0 blocked / 0 unknown' -and $pool.PoolList -notmatch ',') 'Pool excludes API keys runtime and malformed credentials'
+Assert ($pool.PoolAvailable -eq 1 -and $pool.PoolBlocked -eq 0 -and $pool.PoolUnknown -eq 0) 'Structured pool excludes non-subscription credentials'
 $route.mode='automatic'; $route.auth_id=''; $route.strategy='soonest-reset'
 $auto=New-WidgetSnapshot $credentials $route $recent $now
 Assert ($auto.Route -eq 'automatic soonest-reset / applied' -and $auto.Selected -eq 'No manual account') 'Automatic does not predict next account'
+Assert ($auto.RoutingMode -eq 'soonest-reset' -and $auto.SelectedID -eq '' -and $auto.SelectedUntil -eq 0 -and $auto.PrimaryRemaining -eq '' -and $auto.SecondaryReset -eq '') 'Automatic routing exports no selected account or account quota'
+$route.strategy=''; $standard=New-WidgetSnapshot $credentials $route $recent $now
+Assert ($standard.RoutingMode -eq 'automatic') 'Standard automatic mode remains distinct from soonest reset'
+$route.home_enabled=$true; $homeSnapshot=New-WidgetSnapshot $credentials $route $recent $now
+Assert ($homeSnapshot.RoutingMode -eq 'home') 'Home-managed routing is explicit'
+$route.home_enabled=$false
 Rejects { New-WidgetSnapshot ([pscustomobject]@{}) $route $recent $now } 'Invalid top-level schema rejected'
 Rejects { New-WidgetSnapshot ([pscustomobject]@{files='wrong'}) $route $recent $now } 'Invalid files array rejected'
 $temp=Join-Path $env:TEMP ('cliproxy-widget-test-'+[Guid]::NewGuid().ToString('N'))
@@ -91,7 +109,14 @@ try {
     Write-WidgetSnapshot $data $path $now $now.ToUnixTimeSeconds()
     $text=[IO.File]::ReadAllText($path)
     Assert ($text -notmatch 'private@example|!|#|%|Other=evil' -and $text -match 'Selected=Execute evil Key ENV Other evil') 'INI bang variable newline and identity sanitization'
-    1..50 | ForEach-Object { Write-WidgetSnapshot $data $path $now $now.ToUnixTimeSeconds(); Assert ((Get-Content $path).Count -eq 18) 'Atomic replacement complete snapshot' }
+    1..50 | ForEach-Object {
+        Write-WidgetSnapshot $data $path $now $now.ToUnixTimeSeconds()
+        $snapshot=[IO.File]::ReadAllText($path)
+        Assert ($snapshot.StartsWith("[Snapshot]`r`nWritten=1793707200`r`n") -and
+            $snapshot -match '(?m)^SelectedPlan=plus\r?$' -and $snapshot -match '(?m)^PrimaryRemaining=75\r?$' -and
+            $snapshot -match '(?m)^SecondaryReset=1795435200\r?$' -and $snapshot -match '(?m)^PoolAvailable=1\r?$' -and
+            $snapshot.EndsWith("RoutingApplied=1`r`n")) 'Atomic replacement contains complete structured selection and pool'
+    }
     Assert (@(Get-ChildItem $temp -Filter '*.tmp').Count -eq 0) 'No atomic-write leftovers'
     Protect-WidgetDirectory $temp
     Save-WidgetKey (ConvertTo-SecureString 'fixture-secret-do-not-display' -AsPlainText -Force) $temp

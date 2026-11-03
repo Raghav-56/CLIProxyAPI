@@ -1,6 +1,6 @@
 # CLIProxyAccounts for Rainmeter
 
-Passive 340-pixel widget for the custom CLIProxyAPI v8 account console. Requires Windows PowerShell 5.1+ and an existing Rainmeter installation. No additional dependencies, proxy process, OAuth copies, quota probes, queue consumption, routing changes, or scheduled tasks.
+Compact 304-pixel widget for the custom CLIProxyAPI v8 account console. Requires Windows PowerShell 5.1+ and an existing Rainmeter installation. Uses Windows PowerShell and the built-in .NET compiler for a small native hotkey handler. No downloaded dependencies, proxy process, OAuth copies, quota probes, queue consumption, routing changes, or scheduled tasks.
 
 Run from Windows PowerShell:
 
@@ -22,10 +22,13 @@ The loopback URL requires your existing SSH localhost forward. The helper does n
 
 The helper and its private `settings.json`, `key.dpapi`, and atomic `snapshot.ini` live in `%LOCALAPPDATA%\CLIProxyAccounts`. The directory DACL grants only the current Windows user and SYSTEM access. DPAPI uses CurrentUser. No key is stored in Rainmeter, a shortcut, the snapshot, arguments, or logs. The installer can transiently capture the existing management key through SSH stdout in memory and immediately DPAPI-protect it. PowerShell/.NET cannot guarantee erasure of immutable strings from process memory. Do not share process dumps.
 
-The skin's refresh action starts the hidden helper. A user-session mutex allows only one instance. Closing the skin leaves the helper running; stop it explicitly when desired. Restart with the installed shortcut or refresh the skin:
+Press **Ctrl+Alt+Q** to hide or restore the widget. **Ctrl+Alt+M** continues to control MementoMori separately. The widget also has a **Hide** control. **Details** expands the request diagnostics; hiding and showing preserves that view. The default compact view shows two quota bars, readable reset countdowns, and pool status.
+
+The skin's refresh action starts the hidden helper and the native hotkey handler. The handler registers Ctrl+Alt+Q with Windows, suppresses held-key repeats, and uses a per-session singleton. The installer compiles it locally; no executable download is required. If the shortcut is occupied, the helper continues and hotkeys.log records the registration failure. A user-session mutex allows only one instance. Closing the skin leaves the helper and hotkey handler running. Stop polling with Stop.ps1; stop the shortcut separately with StartHotkeys.ps1 -Stop. Refreshing the skin or running Start.ps1 starts both again. Restart with the installed shortcut or refresh the skin:
 
 ```powershell
 & "$env:LOCALAPPDATA\CLIProxyAccounts\Stop.ps1"
+& "$env:LOCALAPPDATA\CLIProxyAccounts\StartHotkeys.ps1" -Stop
 & "$env:LOCALAPPDATA\CLIProxyAccounts\Start.ps1"
 .\desktop\rainmeter\LiveCheck.ps1  # Redacted response shapes only
 .\desktop\rainmeter\TestLifecycle.ps1  # Opt-in installed helper stop/restart check
@@ -38,7 +41,7 @@ Use `-RemoveKey` on the first uninstall invocation. The protected directory and 
 
 Quota values use each credential's passive `quota.observed_at` and `signals`. The response's top-level `observed_at` and successful connection time do not renew quota freshness. Primary and secondary labels use actual minutes, so Go 30-day windows stay separate from 5-hour and weekly windows. Missing, future, malformed, older-than-five-minute, and reset-crossed observations do not count as available. `Reset-After-Seconds` is relative to the observation. Reset-at takes precedence. The Lua reader expires quota displays at the earliest known reset or freshness boundary between polls, and blanks snapshot data if the helper has not written for 35 seconds.
 
-The pool includes only persistent Codex OAuth accounts with valid credential IDs, names, and auth indexes. API-key accounts, runtime credentials, and malformed identities are excluded. The manual selection stays separate from pool counts and a masked account list. Counts describe observed account states, never pooled subscription capacity or the next account. Automatic routing does not select a displayed account. Hash labels are deterministic pseudonyms of credential IDs, not emails. The list shows up to six entries; the console contains the full pool. Latest attempt is the newest observed executor attempt across providers, with allow-listed model text, fixed transports, elapsed time, nullable TTFT, and input/output/cached-input token counts. Missing token counts remain unknown, including when usage was not reported. The selected line also identifies the subscription plan when reported. Executor completion does not prove client delivery. History resets with the server process.
+The pool includes only persistent Codex OAuth accounts with valid credential IDs, names, and auth indexes. API-key accounts, runtime credentials, and malformed identities are excluded. The manual selection stays separate from pool counts and a masked account list. Counts describe observed account states, never pooled subscription capacity or the next account. Automatic routing does not select a displayed account. Hash labels are deterministic pseudonyms of credential IDs, not emails. The list shows up to six entries; the console contains the full pool. Latest attempt is the newest observed executor attempt across providers, with allow-listed model text, fixed transports, elapsed time, nullable TTFT, and input/output/cached-input token counts. Missing token counts remain unknown, including when usage was not reported. The compact view identifies the subscription plan when reported; account IDs and request diagnostics stay in Details. Executor completion does not prove client delivery. History resets with the server process.
 
 The snapshot uses fixed field names and a strict display alphabet that excludes bangs, brackets, hashes, percent signs, quotes, backslashes, and controls. Lua validates every field again before passing text as a separate Rainmeter API argument. API text never enters an action, variable, include, or executable Lua file. The console action runs a fixed local script which validates the configured root again before opening `/accounts.html`. There are no account-switch actions.
 
@@ -54,3 +57,5 @@ Run Lua checks in the installed Rainmeter engine:
 ```
 
 See `VALIDATION.md` for the MSI-Raghav execution record and remaining visual limitation. `SHA256SUMS.txt` contains source hashes, excluding itself.
+
+Test the native shortcut with `TestHotkeys.ps1 -Live`. Add `-InjectKeys` only when you want the test to send actual Ctrl+Alt+Q chords; it temporarily toggles visibility and restores the starting state. Uninstall stops and removes the owned hotkey handler.

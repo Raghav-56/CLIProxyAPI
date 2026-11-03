@@ -73,3 +73,38 @@ go test ./internal/api ./internal/api/handlers/management ./sdk/cliproxy/auth
 ```
 
 The toolchain was invoked from its installed module-cache path with a temporary writable build cache. Tests required loopback socket access outside the restricted sandbox. No Go source changed. Source review and secret-pattern checks passed. The final manifest describes the reviewed source, including these corrections. Screenshot and console-button browser verification remain unavailable as described above.
+
+## Compact view and visibility shortcut
+
+The widget now defaults to 304 by 246 logical pixels, with two quota bars,
+reported window labels, reset countdowns, and pool status. Details expands to
+420 pixels and reveals masked account identity and request diagnostics. Native
+Ctrl+Alt+Q hides or restores the same Rainmeter window, preserving its view.
+MementoMori retains Ctrl+Alt+M independently.
+
+The Windows suite passed 121 checks after adding structured snapshot fields.
+The compact Lua view tests cover percentages, 5-hour/weekly/30-day labels,
+human-readable reset countdowns, stale/reset boundaries, automatic mode,
+unavailable accounts, and expiration of availability in Details. Independent
+review found the last two display-state issues; both were corrected with tests.
+
+The Windows hotkey handler was compiled and installed using built-in .NET tools.
+Native registration, singleton behavior, cancellation, key release, and restart
+passed. Injected Ctrl+Alt+Q chords in compact and expanded views hid and restored
+the same HWND while preserving the foreground window. Eight repeated keydowns
+in one atomic input batch produced one toggle. Earlier separately injected
+held-key tests were inconsistent, so the verified no-repeat result is limited
+to the atomic input test.
+
+The installed Rainmeter engine passed SelfTest and LayoutTest in compact,
+expanded, and restored compact modes. The original MementoMori hotkey process
+remained running. The final state is compact, with one helper and one quota
+hotkey handler in the interactive session. No new Startup entry was added.
+Full uninstall of the newly added hotkey was not exercised; its cancellation
+and release paths were tested. Screenshot verification remains unavailable.
+
+The parent's independent SSH run passed compilation and mock dispatch. Its
+`-Live` stage correctly refused execution outside Rainmeter's interactive
+session. The actual registration, input, and foreground results above came
+from the Windows-side agent in the interactive session, not that SSH run.
+The server build passed again after the redesign; no Go source changed.
