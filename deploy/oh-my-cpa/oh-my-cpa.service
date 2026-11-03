@@ -1,0 +1,14 @@
+[Unit]
+Description=Oh-My-CPA analytics sidecar
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/share/oh-my-cpa
+EnvironmentFile=%h/.config/oh-my-cpa/service.env
+ExecStartPre=/usr/bin/python3 -B %h/.local/share/oh-my-cpa/check_policy.py --database %h/.local/share/oh-my-cpa/data/oh-my-cpa.db
+ExecStart=%h/.local/share/oh-my-cpa/current/oh-my-cpa
+Restart=no
+UMask=0077
+
+[Install]
+WantedBy=default.target

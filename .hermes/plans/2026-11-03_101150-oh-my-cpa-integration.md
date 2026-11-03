@@ -2,9 +2,9 @@
 
 ## Goal and status
 
-Add persistent proxy diagnostics and, after verification, agent access from T3 Code while preserving the existing custom CLIProxyAPI account console and Windows Rainmeter widget. This document is a plan, not deployment authorization or evidence of an installed service. The user authorized cross-thread coordination and independent verification. No sidecar has been installed by this planning task.
+Add persistent proxy diagnostics and, after verification, agent access from T3 Code while preserving the existing custom CLIProxyAPI account console and Windows Rainmeter widget. The user subsequently authorized implementation. The isolated local sidecar is installed; collection and tailnet exposure remain disabled after automatic approval review required specific authorization. `deploy/oh-my-cpa/VALIDATION.md` records actual deployment evidence and remaining gates; proposed steps below are not claims of completed acceptance.
 
-Use the current host's native orchestration. Important planning and verification use CP `gpt-6.1-sol` with `reasoningEffort=high`; separately delegated implementation uses CP `gpt-6.1-terra`. The requested `gpt-6.1-luna` is not in the exposed provider catalog; do not silently substitute a different exploration model. No extra implementation worker is needed until this plan's baseline gates are satisfied.
+Use the current host's native orchestration. Important planning and verification use CP `gpt-6.1-sol` with `reasoningEffort=high`; separately delegated implementation uses CP `gpt-6.1-terra`. The user clarified that exploration should use CP `gpt-6-luna`, which is available. Implementation was authorized after this plan's review; see `deploy/oh-my-cpa/VALIDATION.md` for execution evidence and remaining limits.
 
 ## Current context
 
@@ -29,7 +29,7 @@ Use the current host's native orchestration. Important planning and verification
 | T3 Code | Coding and optional MCP diagnostics | Inference path does not depend on the sidecar; no claimed conversation attribution without explicit future correlation |
 | Independent verifier | Compatibility evidence and acceptance checks | Read-only baseline now; fresh before/after verification at deployment, without changing production routing to demonstrate it |
 
-The coordinator owns only this plan during this task. Proposed implementation files belong under `deploy/oh-my-cpa/`, outside the widget paths. No worker may revert another agent's changes. Commit only the current task's files.
+Implementation files belong under `deploy/oh-my-cpa/`, outside the widget paths. The coordinator owns host deployment, bootstrap, startup guard, backups and final integration; the Terra worker supplied the service template and baseline verifier. No worker may revert another agent's changes. Commit only the current task's files.
 
 ## Deployment shape
 
@@ -111,7 +111,7 @@ Acceptance: users can reach accounts, live widget and historical diagnostics ind
 
 ## Task 5: Gate T3 MCP integration separately
 
-Oh-My-CPA exposes `/api/mcp`, but its management credential is administrator-equivalent and the reviewed MCP context sets `IsAdmin=true`. High-risk writes require browser approval; low-risk writes, including quota refresh and refresh-policy changes, execute directly. No deployable scoped diagnostic credential was found in the reviewed stock code. Leave T3 MCP unattached for phase one. An HTTP-method filter cannot restrict MCP `tools/call`, writing GETs, or a raw admin credential's direct CPA access.
+Oh-My-CPA exposes `/api/mcp`, but its management credential is administrator-equivalent. In pinned v0.3.20, the MCP caller is granted every MCP capability and the management-key identity has no per-capability scoping. High-risk writes require browser approval; low-risk writes, including quota refresh and refresh-policy changes, execute directly. No deployable scoped diagnostic credential was found in the reviewed stock code. Leave T3 MCP unattached for phase one. An HTTP-method filter cannot restrict MCP `tools/call`, writing GETs, or a raw admin credential's direct CPA access.
 
 If a future pinned release provides enforceable scoping, configure only diagnostic tools using protected credential delivery on the actual execution environment. Otherwise retain browser analytics; broad management MCP would be a separate explicit product/permission choice. Do not silently claim a restricted connection or implement an unreviewed authorization proxy. Test denied operations against dummy targets and prove they never reach upstream and that the credential cannot bypass the boundary. Check environment-specific MCP support before changing T3/provider settings.
 

@@ -1,0 +1,7 @@
+[Unit]
+Description=Consistent Oh-My-CPA database backup
+
+[Service]
+Type=oneshot
+UMask=0077
+ExecStart=/usr/bin/python3 -B %h/.local/share/oh-my-cpa/backup.py --database %h/.local/share/oh-my-cpa/data/oh-my-cpa.db --backup-dir %h/.local/share/oh-my-cpa/backups/database
